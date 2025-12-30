@@ -12,7 +12,6 @@ export const protect = async (req: Request, res: Response, next: NextFunction) =
         const token = bearer.split(' ')[1]
 
         if (!token) return next(new CustomError(errors.tokenMissing, 400))
-        console.log('is next')
         next()
     } catch (e: any) {
         return next(new CustomError(e.message, 500))
