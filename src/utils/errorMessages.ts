@@ -1,4 +1,5 @@
 class ErrorMessages {
+    notFound: string = "route not found"
     missingBody: string = "missing body parameter"
 
     emailMissing: string = "missing email parameter"
