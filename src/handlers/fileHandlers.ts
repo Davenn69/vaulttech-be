@@ -45,11 +45,11 @@ export const uploadFile = async (req: Request, res: Response, next: NextFunction
 
 export const selectFiles = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const { folderId } = req.body
+        const { id } = req.params
 
-        if (!folderId) return next(new CustomError(errors.folderIdMissing, 400))
+        if (!id) return next(new CustomError(errors.folderIdMissing, 400))
 
-        const { data: files, error: error } = await supabase.from('files').select().eq('folder_id', folderId)
+        const { data: files, error: error } = await supabase.from('files').select().eq('folder_id', id)
 
         if (error) return next(new CustomError(error.message, 400))
 
