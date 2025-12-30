@@ -5,6 +5,7 @@ import authRoutes from "./routes/authRoutes"
 import fileRoute from "./routes/fileRoutes"
 import multer from "multer"
 import { protect } from "./middlewares/protected"
+import { notFound } from "./middlewares/notFound"
 
 const app = express()
 
@@ -19,5 +20,7 @@ app.use("/api/v1/file", protect, fileRoute)
 //
 
 app.use(errorHandler)
+
+app.use(notFound)
 
 export default app
