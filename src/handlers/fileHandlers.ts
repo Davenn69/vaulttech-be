@@ -11,12 +11,8 @@ export const uploadFile = async (req: Request, res: Response, next: NextFunction
     try {
         if (!req.file) return next(new CustomError(errors.fileMissing, 400))
 
-        const { data: user, error: errorUser } = await supabase.auth.getUser()
-
-        console.log(user)
-
         const { data: profile, error: errorProfile } = await supabase.from('profiles').select().single()
-        if (errorProfile) return next(new CustomError(errorProfile.message, 400))
+        if (errorProfile) return next(new CustomError(errors.invalidUser, 400))
 
         const file = req.file;
         const fileExt = path.extname(file.originalname)
@@ -49,11 +45,33 @@ export const selectFiles = async (req: Request, res: Response, next: NextFunctio
 
         if (!id) return next(new CustomError(errors.folderIdMissing, 400))
 
-        const { data: files, error: error } = await supabase.from('files').select().eq('folder_id', id)
+        const { data: profile, error: errorProfile } = await supabase.from('profiles').select().single()
+        if (errorProfile) return next(new CustomError(errors.invalidUser, 400))
 
+        const { data: files, error: error } = await supabase.from('files').select().eq('folder_id', id)
         if (error) return next(new CustomError(error.message, 400))
 
         res.status(200).json({ message: successMessages.successRetrieveFiles, data: files })
+    } catch (e: any) {
+        next(new CustomError(e.message))
+    }
+}
+
+export const updateName = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { id, name } = req.body
+
+        if (!id) return next(new CustomError(errors.idMissing, 400))
+
+        if (!name) return next(new CustomError(errors.nameMissing, 400))
+
+        const { data: profile, error: errorProfile } = await supabase.from('profiles').select().single()
+        if (errorProfile) return next(new CustomError(errors.invalidUser, 400))
+
+        const { data: file, error: error } = await supabase.from('files').update({ name: name }).eq('id', id).select().single()
+        if (error) return next(new CustomError(error.message, 400))
+
+        res.status(201).json({ message: successMessages.successUpdateFile, data: file })
     } catch (e: any) {
         next(new CustomError(e.message))
     }
