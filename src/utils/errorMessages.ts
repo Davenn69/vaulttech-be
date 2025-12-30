@@ -12,11 +12,14 @@ class ErrorMessages {
     usernameMissing: string = "missing username parameter"
     usernameLength: string = "username must have 30 characters or less"
 
+    idMissing: string = "missing id parameter"
+
     tokenMissing: string = "token is not provided"
     invalidUser: string = "invalid user"
     fileMissing: string = "missing file parameter"
 
     folderIdMissing: string = "missing folder id parameter"
+    nameMissing: string = "missing name parameter"
 }
 
 export const errors = new ErrorMessages()
