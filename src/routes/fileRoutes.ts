@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { selectFiles, uploadFile } from "../handlers/fileHandlers";
+import { selectFiles, updateName, uploadFile } from "../handlers/fileHandlers";
 import multer from "multer";
 
 const route = Router()
@@ -30,5 +30,7 @@ const upload = multer({
 route.post('/uploadFile', upload.single('file'), uploadFile)
 
 route.get('/:id', selectFiles)
+
+route.patch('/updateName', updateName)
 
 export default route
