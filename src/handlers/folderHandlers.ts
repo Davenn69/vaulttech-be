@@ -26,7 +26,7 @@ export const createFolder = async (req: Request, res: Response, next: NextFuncti
 export const getFolders = async (req: Request, res: Response, next: NextFunction) => {
     const { parentId } = req.params
 
-    if (!parentId) return next(new CustomError(errors.folderIdMissing))
+    if (!parentId) return next(new CustomError(errors.folderIdMissing, 400))
 
     const { data: profile, error: profileError } = await supabase.from('profiles').select().single()
     if (profileError) return next(new CustomError(errors.invalidUser, 400))
@@ -35,4 +35,26 @@ export const getFolders = async (req: Request, res: Response, next: NextFunction
     if (error) return next(new CustomError(error.message, 400))
 
     res.status(200).json({ message: successMessages.successRetrieveFolders, data: folder })
+}
+
+export const updateFolder = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { id, name } = req.body
+
+        if (!id) return next(new CustomError(errors.folderIdMissing, 400))
+
+        if (!name) return next(new CustomError(errors.nameMissing, 400))
+
+        const { data: profile, error: profileError } = await supabase.from('profiles').select().single()
+        if (profileError) return next(new CustomError(errors.invalidUser, 400))
+
+        const { data: folder, error: folderError } = await supabase.from('folders').update({ name: name }).eq("id", id).select()
+        if (folderError) return next(new CustomError(folderError.message, 400))
+
+        if (!folder || folder.length == 0) return next(new CustomError(errors.folderNotFound, 404))
+
+        res.status(201).json({ message: successMessages.successUpdateFolder, data: folder[0] })
+    } catch (e: any) {
+        next(new CustomError(e.message, 500))
+    }
 }
