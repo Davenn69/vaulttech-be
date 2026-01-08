@@ -101,3 +101,17 @@ export const deleteFile = async (req: Request, res: Response, next: NextFunction
         next(new CustomError(e.message))
     }
 }
+
+export const moveFile = async (req: Request, res: Response, next: NextFunction) => {
+    const { oldId, newId } = req.body
+
+    const { data: profile, error: profileError } = await supabase.from('profiles').select().single()
+    if (profileError) return next(new CustomError(errors.invalidUser, 400))
+
+    const { data: file, error: errorFile } = await supabase.from('files').update({ folder_id: newId }).eq("folder_id", oldId).select().single()
+    if (errorFile) return next(new CustomError(errorFile.message, 400))
+
+    if (!file || file.length == 0) return next(new CustomError(errors.folderNotFound, 404))
+
+    res.status(201).json({ message: successMessages.successMoveFile, data: file[0] })
+}

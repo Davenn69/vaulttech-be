@@ -58,3 +58,23 @@ export const updateFolder = async (req: Request, res: Response, next: NextFuncti
         next(new CustomError(e.message, 500))
     }
 }
+
+export const deleteFolder = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { id } = req.params
+
+        if (!id) return next(new CustomError(errors.folderIdMissing, 400))
+
+        const { data: profile, error: profileError } = await supabase.from('profiles').select().single()
+        if (profileError) return next(new CustomError(errors.invalidUser))
+
+        const { data: folder, error: folderError } = await supabase.from('folders').update({ is_deleted: true }).eq("id", id).select()
+        if (folderError) return next(new CustomError(folderError.message, 400))
+
+        if (!folder || folder.length == 0) return next(new CustomError(errors.folderNotFound, 404))
+
+        res.status(200).json({ message: successMessages.successDeleteFolder, data: folder[0] })
+    } catch (e: any) {
+        return next(new CustomError(e.message, 500))
+    }
+}

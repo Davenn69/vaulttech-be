@@ -8,6 +8,9 @@ class SuccessMessages {
     successCreateFolder: string = 'successfully created folder'
     successRetrieveFolders: string = 'successfully retrieved folders'
     successUpdateFolder: string = 'successfully updated folder'
+    successDeleteFolder: string = 'successfully deleted folder'
+
+    successMoveFile: string = 'successfully moved file to a new folder'
 }
 
 export const successMessages = new SuccessMessages()
