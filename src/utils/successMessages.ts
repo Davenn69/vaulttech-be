@@ -4,6 +4,7 @@ class SuccessMessages {
     successUpload: string = 'file has been successfully uploaded'
     successRetrieveFiles: string = 'successfully retrieved files'
     successUpdateFile: string = 'successfully updated file'
+    successDeleteFile: string = 'successfully deleted file'
     successCreateFolder: string = 'successfully created folder'
     successRetrieveFolders: string = 'successfully retrieved folders'
     successUpdateFolder: string = 'successfully updated folder'

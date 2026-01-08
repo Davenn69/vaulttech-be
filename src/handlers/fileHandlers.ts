@@ -80,3 +80,24 @@ export const updateName = async (req: Request, res: Response, next: NextFunction
         next(new CustomError(e.message))
     }
 }
+
+export const deleteFile = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { id } = req.params
+
+        if (!id) return next(new CustomError(errors.idMissing, 400))
+
+        const { data: profile, error: errorProfile } = await supabase.from("profiles").select().single()
+        if (errorProfile) return next(new CustomError(errors.invalidUser, 400))
+
+        const { data: file, error: errorFile } = await supabase.from('files').update({ is_deleted: true }).eq("id", id).select().single()
+        if (errorFile) return next(new CustomError(errorFile.message, 400))
+
+        if (!file || file.length == 0) return next(new CustomError(errors.fileNotFound, 404))
+
+        res.status(200).json({ message: successMessages.successDeleteFile, data: file })
+
+    } catch (e: any) {
+        next(new CustomError(e.message))
+    }
+}
