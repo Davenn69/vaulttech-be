@@ -20,6 +20,9 @@ class ErrorMessages {
 
     folderIdMissing: string = "missing folder id parameter"
     nameMissing: string = "missing name parameter"
+
+    fileNotFound: string = "file not found"
+    folderNotFound: string = "folder not found"
 }
 
 export const errors = new ErrorMessages()
