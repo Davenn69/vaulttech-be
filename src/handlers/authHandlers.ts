@@ -4,6 +4,9 @@ import { errors } from "../utils/errorMessages";
 import { supabase } from "../utils/supabase";
 import { successMessages } from "../utils/successMessages";
 import { validation } from "../utils/validation";
+import { db } from "..";
+import { profiles } from "../models/profiles";
+import { folders } from "../models/folders";
 
 export const register = async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -22,17 +25,17 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
         const { data: data, error: error } = await supabase.auth.signUp({ email: email, password: password })
         if (error) return next(new CustomError(error.message, 400))
 
-        const { data: folderData, error: folderError } = await supabase.from('folders').insert({ name: 'Home', created_by: username, path: '/', user_id: data.user?.id }).select()
+        await db.transaction(async (tx) => {
+            const [folder] = await tx.insert(folders).values({ name: 'Home', createdBy: username, path: '/', userId: data.user?.id! }).returning()
 
-        if (folderError) return next(new CustomError(folderError.message, 400))
+            if (!folder) return next(new CustomError('error creating folder', 400))
 
-        const { data: profile, error: profileError } = await supabase.from('profiles').insert({ id: data.user?.id, username: username, home_folder_id: folderData[0].id }).select()
-
-        if (profileError) return next(new CustomError(profileError.message, 400))
+            const profile = await tx.insert(profiles).values({ id: data.user?.id!, username: username, homeFolderId: folder.id }).returning()
+        })
 
         return res.status(201).json({ message: successMessages.register, data: data })
     } catch (e: any) {
-        next(new CustomError(e.message))
+        next(new CustomError(e.message, e.status))
     }
 }
 
