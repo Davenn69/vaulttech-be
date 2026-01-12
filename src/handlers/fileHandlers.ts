@@ -17,6 +17,9 @@ export const uploadFile = async (req: Request, res: Response, next: NextFunction
 
         if (!folderId) return next(new CustomError(errors.folderIdMissing, 400))
 
+        const { data: data, error: error } = await supabase.auth.getUser()
+        if (error) return next(new CustomError(errors.invalidUser, 400))
+
         await db.transaction(async (tx) => {
             const [profile] = await tx.select().from(profiles).limit(1)
 
@@ -53,14 +56,17 @@ export const selectFiles = async (req: Request, res: Response, next: NextFunctio
 
         if (!id) return next(new CustomError(errors.folderIdMissing, 400))
 
-        db.transaction(async (tx) => {
+        const { data: data, error: error } = await supabase.auth.getUser()
+        if (error) return next(new CustomError(errors.invalidUser, 400))
+
+        await db.transaction(async (tx) => {
             const [profile] = await tx.select().from(profiles).limit(1)
 
             if (!profile) return next(new CustomError(errors.invalidUser, 400))
 
             const file = await tx.select().from(files).where(eq(files.folderId, id))
 
-            res.status(200).json({ message: successMessages.successRetrieveFiles, data: files })
+            res.status(200).json({ message: successMessages.successRetrieveFiles, data: file })
         })
 
     } catch (e: any) {
@@ -73,18 +79,22 @@ export const updateName = async (req: Request, res: Response, next: NextFunction
         const { id, name } = req.body
 
         if (!id) return next(new CustomError(errors.idMissing, 400))
-
         if (!name) return next(new CustomError(errors.nameMissing, 400))
 
-        const { data: profile, error: errorProfile } = await supabase.from('profiles').select().single()
-        if (errorProfile) return next(new CustomError(errors.invalidUser, 400))
+        const { data: data, error: error } = await supabase.auth.getUser()
+        if (error) return next(new CustomError(errors.invalidUser, 400))
 
-        const { data: file, error: error } = await supabase.from('files').update({ name: name }).eq('id', id).select()
-        if (error) return next(new CustomError(error.message, 400))
+        await db.transaction(async (tx) => {
+            const [profile] = await tx.select().from(profiles).limit(1)
 
-        if (!file || file.length == 0) return next(new CustomError(errors.fileNotFound, 404))
+            if (!profile) return next(new CustomError(errors.invalidUser, 400))
 
-        res.status(201).json({ message: successMessages.successUpdateFile, data: file })
+            const [file] = await tx.update(files).set({ name: name }).where(eq(files.id, id)).returning()
+
+            if (!file) return next(new CustomError(errors.fileNotFound, 400))
+
+            res.status(201).json({ message: successMessages.successUpdateFile, data: file })
+        })
     } catch (e: any) {
         next(new CustomError(e.message))
     }
@@ -96,16 +106,20 @@ export const deleteFile = async (req: Request, res: Response, next: NextFunction
 
         if (!id) return next(new CustomError(errors.idMissing, 400))
 
-        const { data: profile, error: errorProfile } = await supabase.from("profiles").select().single()
-        if (errorProfile) return next(new CustomError(errors.invalidUser, 400))
+        const { data: data, error: error } = await supabase.auth.getUser()
+        if (error) return next(new CustomError(errors.invalidUser, 400))
 
-        const { data: file, error: errorFile } = await supabase.from('files').update({ is_deleted: true }).eq("id", id).select().single()
-        if (errorFile) return next(new CustomError(errorFile.message, 400))
+        await db.transaction(async (tx) => {
+            const [profile] = await tx.select().from(profiles).limit(1)
 
-        if (!file || file.length == 0) return next(new CustomError(errors.fileNotFound, 404))
+            if (!profile) return next(new CustomError(errors.invalidUser, 400))
 
-        res.status(200).json({ message: successMessages.successDeleteFile, data: file })
+            const [file] = await tx.delete(files).where(eq(files.id, id)).returning()
 
+            if (!file) return next(new CustomError(errors.fileNotFound, 400))
+
+            res.status(200).json({ message: successMessages.successDeleteFile, data: file })
+        })
     } catch (e: any) {
         next(new CustomError(e.message))
     }
@@ -114,13 +128,18 @@ export const deleteFile = async (req: Request, res: Response, next: NextFunction
 export const moveFile = async (req: Request, res: Response, next: NextFunction) => {
     const { oldId, newId } = req.body
 
-    const { data: profile, error: profileError } = await supabase.from('profiles').select().single()
-    if (profileError) return next(new CustomError(errors.invalidUser, 400))
+    const { data: data, error: error } = await supabase.auth.getUser()
+    if (error) return next(new CustomError(errors.invalidUser, 400))
 
-    const { data: file, error: errorFile } = await supabase.from('files').update({ folder_id: newId }).eq("folder_id", oldId).select().single()
-    if (errorFile) return next(new CustomError(errorFile.message, 400))
+    await db.transaction(async (tx) => {
+        const [profile] = await tx.select().from(profiles).limit(1)
 
-    if (!file || file.length == 0) return next(new CustomError(errors.folderNotFound, 404))
+        if (!profile) return next(new CustomError(errors.invalidUser, 400))
 
-    res.status(201).json({ message: successMessages.successMoveFile, data: file[0] })
+        const [file] = await tx.update(files).set({ folderId: newId }).where(eq(files.folderId, oldId)).returning()
+
+        if (!file) return next(new CustomError(errors.folderNotFound, 404))
+
+        res.status(201).json({ message: successMessages.successMoveFile, data: file })
+    })
 }
