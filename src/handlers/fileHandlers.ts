@@ -7,7 +7,7 @@ import { successMessages } from "../utils/successMessages";
 import { v4 as uuidv4 } from "uuid"
 import { db } from "..";
 import { profiles } from "../models/profiles";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { files } from "../models/files";
 
 export const uploadFile = async (req: Request, res: Response, next: NextFunction) => {
@@ -21,7 +21,7 @@ export const uploadFile = async (req: Request, res: Response, next: NextFunction
         if (error) return next(new CustomError(errors.invalidUser, 400))
 
         await db.transaction(async (tx) => {
-            const [profile] = await tx.select().from(profiles).limit(1)
+            const [profile] = await tx.select().from(profiles).where(eq(profiles.id, data.user.id)).limit(1)
 
             if (!profile) return next(new CustomError(errors.invalidUser, 400))
 
@@ -60,11 +60,11 @@ export const selectFiles = async (req: Request, res: Response, next: NextFunctio
         if (error) return next(new CustomError(errors.invalidUser, 400))
 
         await db.transaction(async (tx) => {
-            const [profile] = await tx.select().from(profiles).limit(1)
+            const [profile] = await tx.select().from(profiles).where(eq(profiles.id, data.user.id)).limit(1)
 
             if (!profile) return next(new CustomError(errors.invalidUser, 400))
 
-            const file = await tx.select().from(files).where(eq(files.folderId, id))
+            const file = await tx.select().from(files).where(and(eq(files.folderId, id), eq(files.userId, data.user.id)))
 
             res.status(200).json({ message: successMessages.successRetrieveFiles, data: file })
         })
@@ -85,11 +85,11 @@ export const updateName = async (req: Request, res: Response, next: NextFunction
         if (error) return next(new CustomError(errors.invalidUser, 400))
 
         await db.transaction(async (tx) => {
-            const [profile] = await tx.select().from(profiles).limit(1)
+            const [profile] = await tx.select().from(profiles).where(eq(profiles.id, data.user.id)).limit(1)
 
             if (!profile) return next(new CustomError(errors.invalidUser, 400))
 
-            const [file] = await tx.update(files).set({ name: name }).where(eq(files.id, id)).returning()
+            const [file] = await tx.update(files).set({ name: name }).where(and(eq(files.id, id), eq(files.userId, data.user.id))).returning()
 
             if (!file) return next(new CustomError(errors.fileNotFound, 400))
 
@@ -110,11 +110,11 @@ export const deleteFile = async (req: Request, res: Response, next: NextFunction
         if (error) return next(new CustomError(errors.invalidUser, 400))
 
         await db.transaction(async (tx) => {
-            const [profile] = await tx.select().from(profiles).limit(1)
+            const [profile] = await tx.select().from(profiles).where(eq(profiles.id, data.user.id)).limit(1)
 
             if (!profile) return next(new CustomError(errors.invalidUser, 400))
 
-            const [file] = await tx.delete(files).where(eq(files.id, id)).returning()
+            const [file] = await tx.delete(files).where(and(eq(files.id, id), eq(files.userId, data.user.id))).returning()
 
             if (!file) return next(new CustomError(errors.fileNotFound, 400))
 
@@ -132,11 +132,11 @@ export const moveFile = async (req: Request, res: Response, next: NextFunction) 
     if (error) return next(new CustomError(errors.invalidUser, 400))
 
     await db.transaction(async (tx) => {
-        const [profile] = await tx.select().from(profiles).limit(1)
+        const [profile] = await tx.select().from(profiles).where(eq(profiles.id, data.user.id)).limit(1)
 
         if (!profile) return next(new CustomError(errors.invalidUser, 400))
 
-        const [file] = await tx.update(files).set({ folderId: newId }).where(eq(files.folderId, oldId)).returning()
+        const [file] = await tx.update(files).set({ folderId: newId }).where(and(eq(files.folderId, oldId), eq(files.userId, data.user.id))).returning()
 
         if (!file) return next(new CustomError(errors.folderNotFound, 404))
 
