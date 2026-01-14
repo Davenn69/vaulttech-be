@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { deleteFile, selectFiles, updateName, uploadFile } from "../handlers/fileHandlers";
+import { deleteFile, getFiles, updateName, uploadFile, getDeletedFiles } from "../handlers/fileHandlers";
 import multer from "multer";
 
 const route = Router()
@@ -29,7 +29,9 @@ const upload = multer({
 
 route.post('/uploadFile', upload.single('file'), uploadFile)
 
-route.get('/:id', selectFiles)
+route.get('/:id', getFiles)
+
+route.get('/deleted/:id', getDeletedFiles)
 
 route.patch('/updateName', updateName)
 
