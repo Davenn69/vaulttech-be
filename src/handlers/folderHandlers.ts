@@ -3,38 +3,70 @@ import CustomError from "../models/errorCustom";
 import { errors } from "../utils/errorMessages";
 import { supabase } from "../utils/supabase";
 import { successMessages } from "../utils/successMessages";
+import { db } from "..";
+import { profiles } from "../models/profiles";
+import { and, eq } from "drizzle-orm";
+import { folders } from "../models/folders";
+import { DrizzleErrorCode } from "../models/drizzleError";
 
 export const createFolder = async (req: Request, res: Response, next: NextFunction) => {
-    const { parentId, name } = req.body
+    try {
+        const { parentId, name } = req.body
 
-    if (!parentId) return next(new CustomError(errors.folderIdMissing))
+        if (!parentId) return next(new CustomError(errors.folderIdMissing))
 
-    if (!name) return next(new CustomError(errors.nameMissing))
+        if (!name) return next(new CustomError(errors.nameMissing))
 
-    const { data: profile, error: profileError } = await supabase.from('profiles').select().single()
-    if (profileError) return next(new CustomError(errors.invalidUser, 400))
+        const { data: data, error: error } = await supabase.auth.getUser()
+        if (error) return next(new CustomError(errors.invalidUser, 400))
 
-    const { data: parentFolder, error: parentError } = await supabase.from('folders').select().eq("id", parentId).single()
-    if (parentError) return next(new CustomError(parentError.message, 400))
+        await db.transaction(async (tx) => {
+            const [profile] = await tx.select().from(profiles).where(eq(profiles.id, data.user.id))
 
-    const { data: folder, error: folderError } = await supabase.from("folders").insert({ user_id: profile.id, name: name, created_by: profile.username, path: parentFolder.path, parent_id: parentFolder.id }).select()
-    if (folderError) return next(new CustomError(folderError.message, 400))
+            if (!profile) return next(new CustomError(errors.invalidUser, 400))
 
-    res.status(201).json({ message: successMessages.successCreateFolder, data: folder[0] })
+            const [parentFolder] = await tx.select().from(folders).where(eq(folders.id, parentId))
+            if (!parentFolder) return next(new CustomError(errors.folderNotFound, 400))
+
+            const [folder] = await tx.insert(folders).values({ userId: profile.id, name: name, createdBy: profile.username, path: parentFolder.path, parentId: parentFolder.id }).returning()
+
+            res.status(201).json({ message: successMessages.successCreateFolder, data: folder })
+        })
+    } catch (e: any) {
+        if (e.constructor.name === 'DrizzleQueryError') {
+            next(new DrizzleErrorCode(e.cause.code))
+        } else {
+            next(new CustomError(e.message, 500))
+        }
+    }
 }
 
 export const getFolders = async (req: Request, res: Response, next: NextFunction) => {
-    const { parentId } = req.params
+    try {
+        const { parentId } = req.params
 
-    if (!parentId) return next(new CustomError(errors.folderIdMissing, 400))
+        if (!parentId) return next(new CustomError(errors.folderIdMissing, 400))
 
-    const { data: profile, error: profileError } = await supabase.from('profiles').select().single()
-    if (profileError) return next(new CustomError(errors.invalidUser, 400))
+        const { data: data, error: error } = await supabase.auth.getUser()
+        if (error) return next(new CustomError(errors.invalidUser, 400))
 
-    const { data: folder, error: error } = await supabase.from('folders').select().eq("parent_id", parentId)
-    if (error) return next(new CustomError(error.message, 400))
+        await db.transaction(async (tx) => {
+            const [profile] = await tx.select().from(profiles).where(eq(profiles.id, data.user.id))
 
-    res.status(200).json({ message: successMessages.successRetrieveFolders, data: folder })
+            if (!profile) return next(new CustomError(errors.invalidUser, 400))
+
+            const folder = await tx.select().from(folders).where(eq(folders.parentId, parentId))
+            if (!folder) return next(new CustomError(errors.folderNotFound, 400))
+
+            res.status(200).json({ message: successMessages.successRetrieveFolders, data: folder })
+        })
+    } catch (e: any) {
+        if (e.constructor.name === 'DrizzleQueryError') {
+            next(new DrizzleErrorCode(e.cause.code))
+        } else {
+            next(new CustomError(e.message, 500))
+        }
+    }
 }
 
 export const updateFolder = async (req: Request, res: Response, next: NextFunction) => {
@@ -45,17 +77,26 @@ export const updateFolder = async (req: Request, res: Response, next: NextFuncti
 
         if (!name) return next(new CustomError(errors.nameMissing, 400))
 
-        const { data: profile, error: profileError } = await supabase.from('profiles').select().single()
-        if (profileError) return next(new CustomError(errors.invalidUser, 400))
+        const { data: data, error: error } = await supabase.auth.getUser()
+        if (error) return next(new CustomError(errors.invalidUser, 400))
 
-        const { data: folder, error: folderError } = await supabase.from('folders').update({ name: name }).eq("id", id).select()
-        if (folderError) return next(new CustomError(folderError.message, 400))
+        await db.transaction(async (tx) => {
+            const [profile] = await tx.select().from(profiles).where(eq(profiles.id, data.user.id))
 
-        if (!folder || folder.length == 0) return next(new CustomError(errors.folderNotFound, 404))
+            if (!profile) return next(new CustomError(errors.invalidUser, 400))
 
-        res.status(201).json({ message: successMessages.successUpdateFolder, data: folder[0] })
+            const [folder] = await tx.update(folders).set({ name: name }).where(and(eq(folders.userId, data.user.id), eq(folders.id, id))).returning()
+
+            if (!folder) return next(new CustomError(errors.folderNotFound, 404))
+
+            res.status(201).json({ message: successMessages.successUpdateFolder, data: folder })
+        })
     } catch (e: any) {
-        next(new CustomError(e.message, 500))
+        if (e.constructor.name === 'DrizzleQueryError') {
+            next(new DrizzleErrorCode(e.cause.code))
+        } else {
+            next(new CustomError(e.message, 500))
+        }
     }
 }
 
@@ -65,16 +106,24 @@ export const deleteFolder = async (req: Request, res: Response, next: NextFuncti
 
         if (!id) return next(new CustomError(errors.folderIdMissing, 400))
 
-        const { data: profile, error: profileError } = await supabase.from('profiles').select().single()
-        if (profileError) return next(new CustomError(errors.invalidUser))
+        const { data: data, error: error } = await supabase.auth.getUser()
+        if (error) return next(new CustomError(errors.invalidUser, 400))
 
-        const { data: folder, error: folderError } = await supabase.from('folders').update({ is_deleted: true }).eq("id", id).select()
-        if (folderError) return next(new CustomError(folderError.message, 400))
+        await db.transaction(async (tx) => {
+            const [profile] = await tx.select().from(profiles).where(eq(profiles.id, data.user.id))
 
-        if (!folder || folder.length == 0) return next(new CustomError(errors.folderNotFound, 404))
+            if (!profile) return next(new CustomError(errors.invalidUser, 400))
 
-        res.status(200).json({ message: successMessages.successDeleteFolder, data: folder[0] })
+            const [folder] = await tx.update(folders).set({ isDeleted: true }).where(and(eq(folders.userId, data.user.id), eq(folders.id, id), eq(folders.isDeleted, false))).returning()
+            if (!folder) return next(new CustomError(errors.folderNotFound, 404))
+
+            return res.status(201).json({ message: successMessages.successDeleteFolder, data: folder })
+        })
     } catch (e: any) {
-        return next(new CustomError(e.message, 500))
+        if (e.constructor.name === 'DrizzleQueryError') {
+            next(new DrizzleErrorCode(e.cause.code))
+        } else {
+            next(new CustomError(e.message, 500))
+        }
     }
 }
