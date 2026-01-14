@@ -9,6 +9,7 @@ import { db } from "..";
 import { profiles } from "../models/profiles";
 import { eq, and } from "drizzle-orm";
 import { files } from "../models/files";
+import { DrizzleErrorCode } from "../models/drizzleError";
 
 export const uploadFile = async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -46,7 +47,11 @@ export const uploadFile = async (req: Request, res: Response, next: NextFunction
             res.status(201).json({ message: successMessages.successUpload, data: fileData })
         })
     } catch (e: any) {
-        next(new CustomError(e.message))
+        if (e.constructor.name === 'DrizzleQueryError') {
+            next(new DrizzleErrorCode(e.cause.code))
+        } else {
+            next(new CustomError(e.message, 500))
+        }
     }
 }
 
@@ -70,7 +75,11 @@ export const selectFiles = async (req: Request, res: Response, next: NextFunctio
         })
 
     } catch (e: any) {
-        next(new CustomError(e.message))
+        if (e.constructor.name === 'DrizzleQueryError') {
+            next(new DrizzleErrorCode(e.cause.code))
+        } else {
+            next(new CustomError(e.message, 500))
+        }
     }
 }
 
@@ -96,7 +105,11 @@ export const updateName = async (req: Request, res: Response, next: NextFunction
             res.status(201).json({ message: successMessages.successUpdateFile, data: file })
         })
     } catch (e: any) {
-        next(new CustomError(e.message))
+        if (e.constructor.name === 'DrizzleQueryError') {
+            return next(new DrizzleErrorCode(e.cause.code))
+        }
+
+        return next(new CustomError(e.message, 500))
     }
 }
 
@@ -121,25 +134,37 @@ export const deleteFile = async (req: Request, res: Response, next: NextFunction
             res.status(200).json({ message: successMessages.successDeleteFile, data: file })
         })
     } catch (e: any) {
-        next(new CustomError(e.message))
+        if (e.constructor.name === 'DrizzleQueryError') {
+            next(new DrizzleErrorCode(e.cause.code))
+        } else {
+            next(new CustomError(e.message, 500))
+        }
     }
 }
 
 export const moveFile = async (req: Request, res: Response, next: NextFunction) => {
-    const { oldId, newId } = req.body
+    try {
+        const { oldId, newId } = req.body
 
-    const { data: data, error: error } = await supabase.auth.getUser()
-    if (error) return next(new CustomError(errors.invalidUser, 400))
+        const { data: data, error: error } = await supabase.auth.getUser()
+        if (error) return next(new CustomError(errors.invalidUser, 400))
 
-    await db.transaction(async (tx) => {
-        const [profile] = await tx.select().from(profiles).where(eq(profiles.id, data.user.id)).limit(1)
+        await db.transaction(async (tx) => {
+            const [profile] = await tx.select().from(profiles).where(eq(profiles.id, data.user.id)).limit(1)
 
-        if (!profile) return next(new CustomError(errors.invalidUser, 400))
+            if (!profile) return next(new CustomError(errors.invalidUser, 400))
 
-        const [file] = await tx.update(files).set({ folderId: newId }).where(and(eq(files.folderId, oldId), eq(files.userId, data.user.id))).returning()
+            const [file] = await tx.update(files).set({ folderId: newId }).where(and(eq(files.folderId, oldId), eq(files.userId, data.user.id))).returning()
 
-        if (!file) return next(new CustomError(errors.folderNotFound, 404))
+            if (!file) return next(new CustomError(errors.folderNotFound, 404))
 
-        res.status(201).json({ message: successMessages.successMoveFile, data: file })
-    })
+            res.status(201).json({ message: successMessages.successMoveFile, data: file })
+        })
+    } catch (e: any) {
+        if (e.constructor.name === 'DrizzleQueryError') {
+            next(new DrizzleErrorCode(e.cause.code))
+        } else {
+            next(new CustomError(e.message, 500))
+        }
+    }
 }
