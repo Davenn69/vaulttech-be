@@ -196,3 +196,36 @@ export const getDeletedFiles = async (req: Request, res: Response, next: NextFun
         }
     }
 }
+
+export const downloadFile = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { id } = req.params
+        if (!id) return next(new CustomError(errors.idMissing))
+
+        const { data: data, error: error } = await supabase.auth.getUser()
+        if (error) return next(new CustomError(errors.invalidUser, 400))
+
+        await db.transaction(async (tx) => {
+            const [profile] = await tx.select().from(profiles).where(eq(profiles.id, data.user.id)).limit(1)
+
+            if (!profile) return next(new CustomError(errors.invalidUser, 400))
+
+            const [file] = await tx.select().from(files).where(and(eq(files.userId, data.user.id), eq(files.id, id), eq(files.isDeleted, false)))
+
+            if (!file) return next(new CustomError(errors.fileNotFound, 404))
+
+            const { data: bucketData, error: bucketError } = await supabase.storage.from('Documents').createSignedUrl(file.path, 3600, {
+                download: file.name
+            })
+            if (bucketError) return next(new CustomError(errors.downloadFileFailed, 400))
+
+            return res.status(200).json({ downloadUrl: bucketData.signedUrl, name: file.name, size: file.size })
+        })
+    } catch (e: any) {
+        if (e.constructor.name === 'DrizzleQueryError') {
+            next(new DrizzleErrorCode(e.cause.code))
+        } else {
+            next(new CustomError(e.message, 500))
+        }
+    }
+}

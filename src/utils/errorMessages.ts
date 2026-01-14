@@ -25,6 +25,7 @@ class ErrorMessages {
     folderNotFound: string = "folder not found"
 
     uploadFileFailed: string = "unable to upload file"
+    downloadFileFailed: string = "unable to download file"
 }
 
 export const errors = new ErrorMessages()
