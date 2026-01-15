@@ -1,5 +1,5 @@
 import { NextFunction, Request, Response } from "express";
-import CustomError from "../models/errorCustom";
+import CustomError from "../types/errorCustom";
 import { errors } from "../utils/errorMessages";
 import { supabase } from "../utils/supabase";
 import { successMessages } from "../utils/successMessages";
@@ -43,13 +43,11 @@ export const register = async (
 
       if (!folder) return next(new CustomError("error creating folder", 400));
 
-      await tx
-        .insert(profiles)
-        .values({
-          id: signUpData.user?.id!,
-          username: username,
-          homeFolderId: folder.id,
-        });
+      await tx.insert(profiles).values({
+        id: signUpData.user?.id!,
+        username: username,
+        homeFolderId: folder.id,
+      });
 
       return res
         .status(201)
@@ -72,12 +70,16 @@ export const login = async (
     if (!email) return next(new CustomError(errors.emailMissing, 400));
     if (!password) return next(new CustomError(errors.passwordMissing, 400));
 
-    const { data: data, error: error } = await supabase.auth.signInWithPassword(
-      { email: email, password: password }
-    );
-    if (error) return next(new CustomError(error.message, 400));
+    const { data: loginData, error: loginError } =
+      await supabase.auth.signInWithPassword({
+        email: email,
+        password: password,
+      });
+    if (loginError) return next(new CustomError(loginError.message, 400));
 
-    return res.status(200).json({ message: successMessages.login, data: data });
+    return res
+      .status(200)
+      .json({ message: successMessages.login, data: loginData });
   } catch (e: any) {
     next(new CustomError(e.message));
   }
