@@ -10,6 +10,7 @@ import { profiles } from "../models/profiles";
 import { eq, and } from "drizzle-orm";
 import { files } from "../models/files";
 import { DrizzleErrorCode } from "../models/drizzleError";
+import { folders } from "../models/folders";
 
 export const uploadFile = async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -220,6 +221,92 @@ export const downloadFile = async (req: Request, res: Response, next: NextFuncti
             if (bucketError) return next(new CustomError(errors.downloadFileFailed, 400))
 
             return res.status(200).json({ downloadUrl: bucketData.signedUrl, name: file.name, size: file.size })
+        })
+    } catch (e: any) {
+        if (e.constructor.name === 'DrizzleQueryError') {
+            next(new DrizzleErrorCode(e.cause.code))
+        } else {
+            next(new CustomError(e.message, 500))
+        }
+    }
+}
+
+export const selectFavourites = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { id } = req.params
+
+        if (!id) return next(new CustomError(errors.idMissing, 400))
+
+        const { data: data, error: error } = await supabase.auth.getUser()
+        if (error) return next(new CustomError(errors.invalidUser, 400))
+
+        await db.transaction(async (tx) => {
+            const [profile] = await tx.select().from(profiles).where(eq(profiles.id, data.user.id)).limit(1)
+            if (!profile) return next(new CustomError(errors.invalidUser, 400))
+
+            const [folder] = await tx.select().from(folders).where(and(eq(folders.id, id), eq(folders.userId, profile.id)))
+            if (!folder) return next(new CustomError(errors.folderNotFound, 404))
+
+            const file = await tx.select().from(files).where(and(eq(files.folderId, id), eq(files.userId, data.user.id), eq(files.isFavourite, true)))
+
+            res.status(200).json({ message: successMessages.successRetrieveFiles, data: file })
+        })
+    } catch (e: any) {
+        console.log(e)
+        if (e.constructor.name === 'DrizzleQueryError') {
+            next(new DrizzleErrorCode(e.cause.code))
+        } else {
+            next(new CustomError(e.message, 500))
+        }
+    }
+}
+
+export const addFavourite = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { id } = req.body
+
+        if (!id) return next(new CustomError(errors.idMissing, 400))
+
+        const { data: data, error: error } = await supabase.auth.getUser()
+        if (error) return next(new CustomError(errors.invalidUser, 400))
+
+        await db.transaction(async (tx) => {
+            const [profile] = await tx.select().from(profiles).where(and(eq(profiles.id, data.user.id)))
+
+            if (!profile) return next(new CustomError(errors.invalidUser, 400))
+
+            const [file] = await tx.update(files).set({ isFavourite: true }).where(and(eq(files.userId, data.user.id), eq(files.id, id), eq(files.isFavourite, false))).returning()
+            if (!file) return next(new CustomError(errors.fileNotFound, 404))
+
+            res.status(201).json({ message: successMessages.successAddFavourite, data: file })
+        })
+    } catch (e: any) {
+        if (e.constructor.name === 'DrizzleQueryError') {
+            next(new DrizzleErrorCode(e.cause.code))
+        } else {
+            next(new CustomError(e.message, 500))
+        }
+    }
+}
+
+export const removeFavourite = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { id } = req.body
+
+        if (!id) return next(new CustomError(errors.idMissing, 400))
+
+        const { data: data, error: error } = await supabase.auth.getUser()
+        if (error) return next(new CustomError(errors.invalidUser, 400))
+
+        await db.transaction(async (tx) => {
+            const [profile] = await tx.select().from(profiles).where(and(eq(profiles.id, data.user.id)))
+
+            if (!profile) return next(new CustomError(errors.invalidUser, 400))
+
+            const [file] = await tx.update(files).set({ isFavourite: false }).where(and(eq(files.userId, data.user.id), eq(files.id, id), eq(files.isFavourite, true))).returning()
+            if (!file) return next(new CustomError(errors.fileNotFound, 404))
+
+            res.status(201).json({ message: successMessages.successRemoveFavourite, data: file })
         })
     } catch (e: any) {
         if (e.constructor.name === 'DrizzleQueryError') {

@@ -11,6 +11,8 @@ class SuccessMessages {
     successDeleteFolder: string = 'successfully deleted folder'
 
     successMoveFile: string = 'successfully moved file to a new folder'
+    successAddFavourite: string = 'successfully added to favourites'
+    successRemoveFavourite: string = 'successfully removed from favourites'
 }
 
 export const successMessages = new SuccessMessages()
