@@ -143,6 +143,32 @@ export const deleteFile = async (req: Request, res: Response, next: NextFunction
     }
 }
 
+export const restoreFile = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { id } = req.body
+        if (!id) return next(new CustomError(errors.idMissing, 400))
+
+        const { data: data, error: error } = await supabase.auth.getUser()
+        if (error) return next(new CustomError(errors.invalidUser, 400))
+
+        await db.transaction(async (tx) => {
+            const [profile] = await tx.select().from(profiles).where(eq(profiles.id, data.user.id))
+            if (!profile) return next(new CustomError(errors.invalidUser, 400))
+
+            const [file] = await tx.update(files).set({ isDeleted: false }).where(and(eq(files.isDeleted, true), eq(files.userId, profile.id), eq(files.id, id))).returning()
+            if (!file) return next(new CustomError(errors.fileNotFound, 404))
+
+            res.status(201).json({ message: successMessages.successRestoreFile, data: file })
+        })
+    } catch (e: any) {
+        if (e.constructor.name === 'DrizzleQueryError') {
+            next(new DrizzleErrorCode(e.cause.code))
+        } else {
+            next(new CustomError(e.message, 500))
+        }
+    }
+}
+
 export const moveFile = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const { oldId, newId } = req.body
