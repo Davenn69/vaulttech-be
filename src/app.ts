@@ -7,6 +7,7 @@ import folderRoute from "./routes/folderRoutes"
 import multer from "multer"
 import { protect } from "./middlewares/protected"
 import { notFound } from "./middlewares/notFound"
+import { drizzleError } from "./middlewares/postgresError"
 
 const app = express()
 
@@ -21,6 +22,7 @@ app.use("/api/v1/file", protect, fileRoute)
 app.use("/api/v1/folder", protect, folderRoute)
 //
 
+app.use(drizzleError)
 app.use(errorHandler)
 
 app.use(notFound)
