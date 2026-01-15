@@ -7,6 +7,7 @@ import { validation } from "../utils/validation";
 import { db } from "..";
 import { profiles } from "../models/profiles";
 import { folders } from "../models/folders";
+import { HttpStatusCode } from "../types/httpStatusCode";
 
 export const register = async (
   req: Request,
@@ -14,22 +15,27 @@ export const register = async (
   next: NextFunction
 ) => {
   try {
-    if (!req.body) return next(new CustomError(errors.missingBody, 400));
+    if (!req.body)
+      throw new CustomError(errors.missingBody, HttpStatusCode.BAD_REQUEST);
     const { email, password, username } = req.body;
 
     const emailMessage = validation.validateEmail(email);
-    if (emailMessage) return next(new CustomError(emailMessage, 400));
+    if (emailMessage)
+      throw new CustomError(emailMessage, HttpStatusCode.BAD_REQUEST);
 
     const passwordMessage = validation.validatePassword(password);
-    if (passwordMessage) return next(new CustomError(passwordMessage, 400));
+    if (passwordMessage)
+      throw next(new CustomError(passwordMessage, HttpStatusCode.BAD_REQUEST));
 
     const usernameMessage = validation.validateUsername(username);
-    if (usernameMessage) return next(new CustomError(usernameMessage, 400));
+    if (usernameMessage)
+      throw new CustomError(usernameMessage, HttpStatusCode.BAD_REQUEST);
 
     await db.transaction(async (tx) => {
       const { data: signUpData, error: signUpError } =
         await supabase.auth.signUp({ email: email, password: password });
-      if (signUpError) return next(new CustomError(signUpError.message, 400));
+      if (signUpError)
+        throw new CustomError(signUpError.message, HttpStatusCode.BAD_REQUEST);
 
       const [folder] = await tx
         .insert(folders)
@@ -41,7 +47,7 @@ export const register = async (
         })
         .returning();
 
-      if (!folder) return next(new CustomError("error creating folder", 400));
+      if (!folder) throw new CustomError("error creating folder", 400);
 
       await tx.insert(profiles).values({
         id: signUpData.user?.id!,
@@ -50,7 +56,7 @@ export const register = async (
       });
 
       return res
-        .status(201)
+        .status(HttpStatusCode.CREATED)
         .json({ message: successMessages.register, data: signUpData });
     });
   } catch (e: any) {
@@ -64,21 +70,27 @@ export const login = async (
   next: NextFunction
 ) => {
   try {
-    if (!req.body) return next(new CustomError(errors.missingBody, 400));
+    if (!req.body)
+      throw new CustomError(errors.missingBody, HttpStatusCode.BAD_REQUEST);
     const { email, password } = req.body;
 
-    if (!email) return next(new CustomError(errors.emailMissing, 400));
-    if (!password) return next(new CustomError(errors.passwordMissing, 400));
+    if (!email)
+      throw new CustomError(errors.emailMissing, HttpStatusCode.BAD_REQUEST);
+    if (!password)
+      throw new CustomError(errors.passwordMissing, HttpStatusCode.BAD_REQUEST);
 
     const { data: loginData, error: loginError } =
       await supabase.auth.signInWithPassword({
         email: email,
         password: password,
       });
-    if (loginError) return next(new CustomError(loginError.message, 400));
+    if (loginError)
+      return next(
+        new CustomError(loginError.message, HttpStatusCode.BAD_REQUEST)
+      );
 
     return res
-      .status(200)
+      .status(HttpStatusCode.OK)
       .json({ message: successMessages.login, data: loginData });
   } catch (e: any) {
     next(new CustomError(e.message));
