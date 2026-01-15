@@ -11,6 +11,7 @@ import { eq, and } from "drizzle-orm";
 import { files } from "../models/files";
 import { DrizzleErrorCode } from "../types/drizzleError";
 import { folders } from "../models/folders";
+import { HttpStatusCode } from "../types/httpStatusCode";
 
 export const uploadFile = async (
   req: Request,
@@ -19,21 +20,25 @@ export const uploadFile = async (
 ) => {
   try {
     const { folderId } = req.body;
-    if (!req.file) return next(new CustomError(errors.fileMissing, 400));
+    if (!req.file)
+      throw new CustomError(errors.fileMissing, HttpStatusCode.BAD_REQUEST);
 
-    if (!folderId) return next(new CustomError(errors.folderIdMissing, 400));
+    if (!folderId)
+      throw new CustomError(errors.folderIdMissing, HttpStatusCode.BAD_REQUEST);
 
-    const { data: data, error: error } = await supabase.auth.getUser();
-    if (error) return next(new CustomError(errors.invalidUser, 400));
+    const { data: userData, error: userError } = await supabase.auth.getUser();
+    if (userError)
+      throw new CustomError(errors.invalidUser, HttpStatusCode.BAD_REQUEST);
 
     await db.transaction(async (tx) => {
       const [profile] = await tx
         .select()
         .from(profiles)
-        .where(eq(profiles.id, data.user.id))
+        .where(eq(profiles.id, userData.user.id))
         .limit(1);
 
-      if (!profile) return next(new CustomError(errors.invalidUser, 400));
+      if (!profile)
+        throw new CustomError(errors.invalidUser, HttpStatusCode.BAD_REQUEST);
 
       const file = req.file!;
       const fileExt = path.extname(file.originalname).replaceAll(".", "");
@@ -42,14 +47,15 @@ export const uploadFile = async (
       const uniqueName = `${uuidv4()}.${fileExt}`;
       const filePath = `${profile.id}/${folderId}/${uniqueName}`;
 
-      const { error: error } = await supabase.storage
+      const { error: bucketError } = await supabase.storage
         .from("Documents")
         .upload(filePath, file.buffer, {
           contentType: file.mimetype,
           cacheControl: "3600",
         });
 
-      if (error) return next(new CustomError(error.message, 400));
+      if (bucketError)
+        throw new CustomError(bucketError.message, HttpStatusCode.BAD_REQUEST);
 
       const [fileData] = await tx
         .insert(files)
@@ -64,10 +70,14 @@ export const uploadFile = async (
         })
         .returning();
 
-      if (!fileData) return next(new CustomError(errors.uploadFileFailed, 400));
+      if (!fileData)
+        throw new CustomError(
+          errors.uploadFileFailed,
+          HttpStatusCode.BAD_REQUEST
+        );
 
       res
-        .status(201)
+        .status(HttpStatusCode.CREATED)
         .json({ message: successMessages.successUpload, data: fileData });
     });
   } catch (e: any) {
