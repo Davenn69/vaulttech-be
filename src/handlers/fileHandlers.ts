@@ -84,7 +84,7 @@ export const uploadFile = async (
     if (e.constructor.name === "DrizzleQueryError") {
       next(new DrizzleErrorCode(e.cause.code));
     } else {
-      next(new CustomError(e.message, 500));
+      next(e);
     }
   }
 };
@@ -97,19 +97,22 @@ export const getFiles = async (
   try {
     const { id } = req.params;
 
-    if (!id) return next(new CustomError(errors.folderIdMissing, 400));
+    if (!id)
+      throw new CustomError(errors.folderIdMissing, HttpStatusCode.BAD_REQUEST);
 
-    const { data: data, error: error } = await supabase.auth.getUser();
-    if (error) return next(new CustomError(errors.invalidUser, 400));
+    const { data: userData, error: userError } = await supabase.auth.getUser();
+    if (userError)
+      throw new CustomError(errors.invalidUser, HttpStatusCode.BAD_REQUEST);
 
     await db.transaction(async (tx) => {
       const [profile] = await tx
         .select()
         .from(profiles)
-        .where(eq(profiles.id, data.user.id))
+        .where(eq(profiles.id, userData.user.id))
         .limit(1);
 
-      if (!profile) return next(new CustomError(errors.invalidUser, 400));
+      if (!profile)
+        throw new CustomError(errors.invalidUser, HttpStatusCode.BAD_REQUEST);
 
       const file = await tx
         .select()
@@ -117,20 +120,20 @@ export const getFiles = async (
         .where(
           and(
             eq(files.folderId, id),
-            eq(files.userId, data.user.id),
+            eq(files.userId, userData.user.id),
             eq(files.isDeleted, false)
           )
         );
 
       res
-        .status(200)
+        .status(HttpStatusCode.OK)
         .json({ message: successMessages.successRetrieveFiles, data: file });
     });
   } catch (e: any) {
     if (e.constructor.name === "DrizzleQueryError") {
       next(new DrizzleErrorCode(e.cause.code));
     } else {
-      next(new CustomError(e.message, 500));
+      next(e);
     }
   }
 };
@@ -143,39 +146,44 @@ export const updateName = async (
   try {
     const { id, name } = req.body;
 
-    if (!id) return next(new CustomError(errors.idMissing, 400));
-    if (!name) return next(new CustomError(errors.nameMissing, 400));
+    if (!id)
+      throw new CustomError(errors.idMissing, HttpStatusCode.BAD_REQUEST);
+    if (!name)
+      throw new CustomError(errors.nameMissing, HttpStatusCode.BAD_REQUEST);
 
-    const { data: data, error: error } = await supabase.auth.getUser();
-    if (error) return next(new CustomError(errors.invalidUser, 400));
+    const { data: userData, error: userError } = await supabase.auth.getUser();
+    if (userError)
+      throw new CustomError(errors.invalidUser, HttpStatusCode.BAD_REQUEST);
 
     await db.transaction(async (tx) => {
       const [profile] = await tx
         .select()
         .from(profiles)
-        .where(eq(profiles.id, data.user.id))
+        .where(eq(profiles.id, userData.user.id))
         .limit(1);
 
-      if (!profile) return next(new CustomError(errors.invalidUser, 400));
+      if (!profile)
+        throw new CustomError(errors.invalidUser, HttpStatusCode.BAD_REQUEST);
 
       const [file] = await tx
         .update(files)
         .set({ name: name })
-        .where(and(eq(files.id, id), eq(files.userId, data.user.id)))
+        .where(and(eq(files.id, id), eq(files.userId, userData.user.id)))
         .returning();
 
-      if (!file) return next(new CustomError(errors.fileNotFound, 400));
+      if (!file)
+        throw new CustomError(errors.fileNotFound, HttpStatusCode.NOT_FOUND);
 
       res
-        .status(201)
+        .status(HttpStatusCode.OK)
         .json({ message: successMessages.successUpdateFile, data: file });
     });
   } catch (e: any) {
     if (e.constructor.name === "DrizzleQueryError") {
       return next(new DrizzleErrorCode(e.cause.code));
+    } else {
+      return next(e);
     }
-
-    return next(new CustomError(e.message, 500));
   }
 };
 
@@ -187,19 +195,22 @@ export const deleteFile = async (
   try {
     const { id } = req.params;
 
-    if (!id) return next(new CustomError(errors.idMissing, 400));
+    if (!id)
+      throw new CustomError(errors.idMissing, HttpStatusCode.BAD_REQUEST);
 
-    const { data: data, error: error } = await supabase.auth.getUser();
-    if (error) return next(new CustomError(errors.invalidUser, 400));
+    const { data: userData, error: userError } = await supabase.auth.getUser();
+    if (userError)
+      throw new CustomError(errors.invalidUser, HttpStatusCode.BAD_REQUEST);
 
     await db.transaction(async (tx) => {
       const [profile] = await tx
         .select()
         .from(profiles)
-        .where(eq(profiles.id, data.user.id))
+        .where(eq(profiles.id, userData.user.id))
         .limit(1);
 
-      if (!profile) return next(new CustomError(errors.invalidUser, 400));
+      if (!profile)
+        throw new CustomError(errors.invalidUser, HttpStatusCode.BAD_REQUEST);
 
       const [file] = await tx
         .update(files)
@@ -207,23 +218,24 @@ export const deleteFile = async (
         .where(
           and(
             eq(files.id, id),
-            eq(files.userId, data.user.id),
+            eq(files.userId, userData.user.id),
             eq(files.isDeleted, false)
           )
         )
         .returning();
 
-      if (!file) return next(new CustomError(errors.fileNotFound, 400));
+      if (!file)
+        throw new CustomError(errors.fileNotFound, HttpStatusCode.BAD_REQUEST);
 
       res
-        .status(200)
+        .status(HttpStatusCode.OK)
         .json({ message: successMessages.successDeleteFile, data: file });
     });
   } catch (e: any) {
     if (e.constructor.name === "DrizzleQueryError") {
       next(new DrizzleErrorCode(e.cause.code));
     } else {
-      next(new CustomError(e.message, 500));
+      next(e);
     }
   }
 };
@@ -235,17 +247,20 @@ export const restoreFile = async (
 ) => {
   try {
     const { id } = req.body;
-    if (!id) return next(new CustomError(errors.idMissing, 400));
+    if (!id)
+      throw new CustomError(errors.idMissing, HttpStatusCode.BAD_REQUEST);
 
-    const { data: data, error: error } = await supabase.auth.getUser();
-    if (error) return next(new CustomError(errors.invalidUser, 400));
+    const { data: userData, error: userError } = await supabase.auth.getUser();
+    if (userError)
+      throw new CustomError(errors.invalidUser, HttpStatusCode.BAD_REQUEST);
 
     await db.transaction(async (tx) => {
       const [profile] = await tx
         .select()
         .from(profiles)
-        .where(eq(profiles.id, data.user.id));
-      if (!profile) return next(new CustomError(errors.invalidUser, 400));
+        .where(eq(profiles.id, userData.user.id));
+      if (!profile)
+        throw new CustomError(errors.invalidUser, HttpStatusCode.BAD_REQUEST);
 
       const [file] = await tx
         .update(files)
@@ -258,17 +273,18 @@ export const restoreFile = async (
           )
         )
         .returning();
-      if (!file) return next(new CustomError(errors.fileNotFound, 404));
+      if (!file)
+        throw new CustomError(errors.fileNotFound, HttpStatusCode.NOT_FOUND);
 
       res
-        .status(201)
+        .status(HttpStatusCode.OK)
         .json({ message: successMessages.successRestoreFile, data: file });
     });
   } catch (e: any) {
     if (e.constructor.name === "DrizzleQueryError") {
       next(new DrizzleErrorCode(e.cause.code));
     } else {
-      next(new CustomError(e.message, 500));
+      next(e);
     }
   }
 };
@@ -281,35 +297,40 @@ export const moveFile = async (
   try {
     const { oldId, newId } = req.body;
 
-    const { data: data, error: error } = await supabase.auth.getUser();
-    if (error) return next(new CustomError(errors.invalidUser, 400));
+    const { data: userData, error: userError } = await supabase.auth.getUser();
+    if (userError)
+      throw new CustomError(errors.invalidUser, HttpStatusCode.BAD_REQUEST);
 
     await db.transaction(async (tx) => {
       const [profile] = await tx
         .select()
         .from(profiles)
-        .where(eq(profiles.id, data.user.id))
+        .where(eq(profiles.id, userData.user.id))
         .limit(1);
 
-      if (!profile) return next(new CustomError(errors.invalidUser, 400));
+      if (!profile)
+        throw new CustomError(errors.invalidUser, HttpStatusCode.BAD_REQUEST);
 
       const [file] = await tx
         .update(files)
         .set({ folderId: newId })
-        .where(and(eq(files.folderId, oldId), eq(files.userId, data.user.id)))
+        .where(
+          and(eq(files.folderId, oldId), eq(files.userId, userData.user.id))
+        )
         .returning();
 
-      if (!file) return next(new CustomError(errors.folderNotFound, 404));
+      if (!file)
+        throw new CustomError(errors.folderNotFound, HttpStatusCode.NOT_FOUND);
 
       res
-        .status(201)
+        .status(HttpStatusCode.OK)
         .json({ message: successMessages.successMoveFile, data: file });
     });
   } catch (e: any) {
     if (e.constructor.name === "DrizzleQueryError") {
       next(new DrizzleErrorCode(e.cause.code));
     } else {
-      next(new CustomError(e.message, 500));
+      next(e);
     }
   }
 };
@@ -322,19 +343,22 @@ export const getDeletedFiles = async (
   try {
     const { id } = req.params;
 
-    if (!id) return next(new CustomError(errors.folderIdMissing, 400));
+    if (!id)
+      throw new CustomError(errors.folderIdMissing, HttpStatusCode.BAD_REQUEST);
 
-    const { data: data, error: error } = await supabase.auth.getUser();
-    if (error) return next(new CustomError(errors.invalidUser, 400));
+    const { data: userData, error: userError } = await supabase.auth.getUser();
+    if (userError)
+      throw new CustomError(errors.invalidUser, HttpStatusCode.BAD_REQUEST);
 
     await db.transaction(async (tx) => {
       const [profile] = await tx
         .select()
         .from(profiles)
-        .where(eq(profiles.id, data.user.id))
+        .where(eq(profiles.id, userData.user.id))
         .limit(1);
 
-      if (!profile) return next(new CustomError(errors.invalidUser, 400));
+      if (!profile)
+        throw new CustomError(errors.invalidUser, HttpStatusCode.BAD_REQUEST);
 
       const file = await tx
         .select()
@@ -342,20 +366,20 @@ export const getDeletedFiles = async (
         .where(
           and(
             eq(files.folderId, id),
-            eq(files.userId, data.user.id),
+            eq(files.userId, userData.user.id),
             eq(files.isDeleted, true)
           )
         );
 
       res
-        .status(200)
+        .status(HttpStatusCode.OK)
         .json({ message: successMessages.successRetrieveFiles, data: file });
     });
   } catch (e: any) {
     if (e.constructor.name === "DrizzleQueryError") {
       next(new DrizzleErrorCode(e.cause.code));
     } else {
-      next(new CustomError(e.message, 500));
+      next(e);
     }
   }
 };
@@ -367,32 +391,36 @@ export const downloadFile = async (
 ) => {
   try {
     const { id } = req.params;
-    if (!id) return next(new CustomError(errors.idMissing));
+    if (!id)
+      throw new CustomError(errors.idMissing, HttpStatusCode.BAD_REQUEST);
 
-    const { data: data, error: error } = await supabase.auth.getUser();
-    if (error) return next(new CustomError(errors.invalidUser, 400));
+    const { data: userData, error: userError } = await supabase.auth.getUser();
+    if (userError)
+      throw new CustomError(errors.invalidUser, HttpStatusCode.BAD_REQUEST);
 
     await db.transaction(async (tx) => {
       const [profile] = await tx
         .select()
         .from(profiles)
-        .where(eq(profiles.id, data.user.id))
+        .where(eq(profiles.id, userData.user.id))
         .limit(1);
 
-      if (!profile) return next(new CustomError(errors.invalidUser, 400));
+      if (!profile)
+        throw new CustomError(errors.invalidUser, HttpStatusCode.BAD_REQUEST);
 
       const [file] = await tx
         .select()
         .from(files)
         .where(
           and(
-            eq(files.userId, data.user.id),
+            eq(files.userId, userData.user.id),
             eq(files.id, id),
             eq(files.isDeleted, false)
           )
         );
 
-      if (!file) return next(new CustomError(errors.fileNotFound, 404));
+      if (!file)
+        throw new CustomError(errors.fileNotFound, HttpStatusCode.NOT_FOUND);
 
       const { data: bucketData, error: bucketError } = await supabase.storage
         .from("Documents")
@@ -402,7 +430,7 @@ export const downloadFile = async (
       if (bucketError)
         return next(new CustomError(errors.downloadFileFailed, 400));
 
-      return res.status(200).json({
+      return res.status(HttpStatusCode.OK).json({
         downloadUrl: bucketData.signedUrl,
         name: file.name,
         size: file.size,
@@ -412,7 +440,7 @@ export const downloadFile = async (
     if (e.constructor.name === "DrizzleQueryError") {
       next(new DrizzleErrorCode(e.cause.code));
     } else {
-      next(new CustomError(e.message, 500));
+      next(e);
     }
   }
 };
@@ -425,24 +453,30 @@ export const selectFavourites = async (
   try {
     const { id } = req.params;
 
-    if (!id) return next(new CustomError(errors.idMissing, 400));
+    if (!id)
+      return next(
+        new CustomError(errors.idMissing, HttpStatusCode.BAD_REQUEST)
+      );
 
-    const { data: data, error: error } = await supabase.auth.getUser();
-    if (error) return next(new CustomError(errors.invalidUser, 400));
+    const { data: userData, error: userError } = await supabase.auth.getUser();
+    if (userError)
+      throw new CustomError(errors.invalidUser, HttpStatusCode.BAD_REQUEST);
 
     await db.transaction(async (tx) => {
       const [profile] = await tx
         .select()
         .from(profiles)
-        .where(eq(profiles.id, data.user.id))
+        .where(eq(profiles.id, userData.user.id))
         .limit(1);
-      if (!profile) return next(new CustomError(errors.invalidUser, 400));
+      if (!profile)
+        throw new CustomError(errors.invalidUser, HttpStatusCode.BAD_REQUEST);
 
       const [folder] = await tx
         .select()
         .from(folders)
         .where(and(eq(folders.id, id), eq(folders.userId, profile.id)));
-      if (!folder) return next(new CustomError(errors.folderNotFound, 404));
+      if (!folder)
+        throw new CustomError(errors.folderNotFound, HttpStatusCode.NOT_FOUND);
 
       const file = await tx
         .select()
@@ -450,21 +484,20 @@ export const selectFavourites = async (
         .where(
           and(
             eq(files.folderId, id),
-            eq(files.userId, data.user.id),
+            eq(files.userId, userData.user.id),
             eq(files.isFavourite, true)
           )
         );
 
       res
-        .status(200)
+        .status(HttpStatusCode.OK)
         .json({ message: successMessages.successRetrieveFiles, data: file });
     });
   } catch (e: any) {
-    console.log(e);
     if (e.constructor.name === "DrizzleQueryError") {
       next(new DrizzleErrorCode(e.cause.code));
     } else {
-      next(new CustomError(e.message, 500));
+      next(e);
     }
   }
 };
@@ -477,41 +510,45 @@ export const addFavourite = async (
   try {
     const { id } = req.body;
 
-    if (!id) return next(new CustomError(errors.idMissing, 400));
+    if (!id)
+      throw new CustomError(errors.idMissing, HttpStatusCode.BAD_REQUEST);
 
-    const { data: data, error: error } = await supabase.auth.getUser();
-    if (error) return next(new CustomError(errors.invalidUser, 400));
+    const { data: userData, error: userError } = await supabase.auth.getUser();
+    if (userError)
+      throw new CustomError(errors.invalidUser, HttpStatusCode.BAD_REQUEST);
 
     await db.transaction(async (tx) => {
       const [profile] = await tx
         .select()
         .from(profiles)
-        .where(and(eq(profiles.id, data.user.id)));
+        .where(and(eq(profiles.id, userData.user.id)));
 
-      if (!profile) return next(new CustomError(errors.invalidUser, 400));
+      if (!profile)
+        throw new CustomError(errors.invalidUser, HttpStatusCode.BAD_REQUEST);
 
       const [file] = await tx
         .update(files)
         .set({ isFavourite: true })
         .where(
           and(
-            eq(files.userId, data.user.id),
+            eq(files.userId, userData.user.id),
             eq(files.id, id),
             eq(files.isFavourite, false)
           )
         )
         .returning();
-      if (!file) return next(new CustomError(errors.fileNotFound, 404));
+      if (!file)
+        throw new CustomError(errors.fileNotFound, HttpStatusCode.NOT_FOUND);
 
       res
-        .status(201)
+        .status(HttpStatusCode.OK)
         .json({ message: successMessages.successAddFavourite, data: file });
     });
   } catch (e: any) {
     if (e.constructor.name === "DrizzleQueryError") {
       next(new DrizzleErrorCode(e.cause.code));
     } else {
-      next(new CustomError(e.message, 500));
+      next(e);
     }
   }
 };
@@ -524,41 +561,45 @@ export const removeFavourite = async (
   try {
     const { id } = req.body;
 
-    if (!id) return next(new CustomError(errors.idMissing, 400));
+    if (!id)
+      throw new CustomError(errors.idMissing, HttpStatusCode.BAD_REQUEST);
 
-    const { data: data, error: error } = await supabase.auth.getUser();
-    if (error) return next(new CustomError(errors.invalidUser, 400));
+    const { data: userData, error: userError } = await supabase.auth.getUser();
+    if (userError)
+      throw new CustomError(errors.invalidUser, HttpStatusCode.BAD_REQUEST);
 
     await db.transaction(async (tx) => {
       const [profile] = await tx
         .select()
         .from(profiles)
-        .where(and(eq(profiles.id, data.user.id)));
+        .where(and(eq(profiles.id, userData.user.id)));
 
-      if (!profile) return next(new CustomError(errors.invalidUser, 400));
+      if (!profile)
+        throw new CustomError(errors.invalidUser, HttpStatusCode.BAD_REQUEST);
 
       const [file] = await tx
         .update(files)
         .set({ isFavourite: false })
         .where(
           and(
-            eq(files.userId, data.user.id),
+            eq(files.userId, userData.user.id),
             eq(files.id, id),
             eq(files.isFavourite, true)
           )
         )
         .returning();
-      if (!file) return next(new CustomError(errors.fileNotFound, 404));
+      if (!file)
+        throw new CustomError(errors.fileNotFound, HttpStatusCode.NOT_FOUND);
 
       res
-        .status(201)
+        .status(HttpStatusCode.OK)
         .json({ message: successMessages.successRemoveFavourite, data: file });
     });
   } catch (e: any) {
     if (e.constructor.name === "DrizzleQueryError") {
       next(new DrizzleErrorCode(e.cause.code));
     } else {
-      next(new CustomError(e.message, 500));
+      next(e);
     }
   }
 };
