@@ -127,3 +127,30 @@ export const deleteFolder = async (req: Request, res: Response, next: NextFuncti
         }
     }
 }
+
+export const restoreFolder = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { id } = req.body
+        if (!id) return next(new CustomError(errors.invalidUser, 400))
+
+        const { data: data, error: error } = await supabase.auth.getUser()
+        console.log(error)
+        if (error) return next(new CustomError(errors.invalidUser, 400))
+
+        await db.transaction(async (tx) => {
+            const [profile] = await tx.select().from(profiles).where(eq(profiles.id, data.user.id))
+            if (!profile) return next(new CustomError(errors.invalidUser, 400))
+
+            const [folder] = await tx.update(folders).set({ isDeleted: false }).where(and(eq(folders.id, id), eq(folders.userId, profile.id), eq(folders.isDeleted, true)))
+            if (!folder) return next(new CustomError(errors.folderNotFound, 400))
+
+            res.status(201).json({ message: successMessages.successRestoreFolder, data: folder })
+        })
+    } catch (e: any) {
+        if (e.constructor.name === 'DrizzleCustomError') {
+            next(new DrizzleErrorCode(e.cause.code))
+        } else {
+            next(new CustomError(e.message, 500))
+        }
+    }
+}

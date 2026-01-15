@@ -10,6 +10,7 @@ class SuccessMessages {
     successRetrieveFolders: string = 'successfully retrieved folders'
     successUpdateFolder: string = 'successfully updated folder'
     successDeleteFolder: string = 'successfully deleted folder'
+    successRestoreFolder: string = 'successfully restore folder'
 
     successMoveFile: string = 'successfully moved file to a new folder'
     successAddFavourite: string = 'successfully added to favourites'
