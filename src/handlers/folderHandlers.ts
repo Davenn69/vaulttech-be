@@ -8,6 +8,7 @@ import { profiles } from "../models/profiles";
 import { and, eq } from "drizzle-orm";
 import { folders } from "../models/folders";
 import { DrizzleErrorCode } from "../types/drizzleError";
+import { HttpStatusCode } from "../types/httpStatusCode";
 
 export const createFolder = async (
   req: Request,
@@ -17,27 +18,33 @@ export const createFolder = async (
   try {
     const { parentId, name } = req.body;
 
-    if (!parentId) return next(new CustomError(errors.folderIdMissing));
+    if (!parentId)
+      throw new CustomError(errors.folderIdMissing, HttpStatusCode.BAD_REQUEST);
 
-    if (!name) return next(new CustomError(errors.nameMissing));
+    if (!name)
+      throw new CustomError(errors.nameMissing, HttpStatusCode.BAD_REQUEST);
 
-    const { data: data, error: error } = await supabase.auth.getUser();
-    if (error) return next(new CustomError(errors.invalidUser, 400));
+    const { data: userData, error: userError } = await supabase.auth.getUser();
+    if (userError)
+      throw new CustomError(errors.invalidUser, HttpStatusCode.BAD_REQUEST);
 
     await db.transaction(async (tx) => {
       const [profile] = await tx
         .select()
         .from(profiles)
-        .where(eq(profiles.id, data.user.id));
+        .where(eq(profiles.id, userData.user.id));
 
-      if (!profile) return next(new CustomError(errors.invalidUser, 400));
+      if (!profile)
+        throw new CustomError(errors.invalidUser, HttpStatusCode.BAD_REQUEST);
 
       const [parentFolder] = await tx
         .select()
         .from(folders)
         .where(eq(folders.id, parentId));
       if (!parentFolder)
-        return next(new CustomError(errors.folderNotFound, 400));
+        return next(
+          new CustomError(errors.folderNotFound, HttpStatusCode.NOT_FOUND)
+        );
 
       const [folder] = await tx
         .insert(folders)
@@ -51,14 +58,14 @@ export const createFolder = async (
         .returning();
 
       res
-        .status(201)
+        .status(HttpStatusCode.CREATED)
         .json({ message: successMessages.successCreateFolder, data: folder });
     });
   } catch (e: any) {
     if (e.constructor.name === "DrizzleQueryError") {
       next(new DrizzleErrorCode(e.cause.code));
     } else {
-      next(new CustomError(e.message, 500));
+      next(e);
     }
   }
 };
@@ -71,26 +78,30 @@ export const getFolders = async (
   try {
     const { parentId } = req.params;
 
-    if (!parentId) return next(new CustomError(errors.folderIdMissing, 400));
+    if (!parentId)
+      throw new CustomError(errors.folderIdMissing, HttpStatusCode.BAD_REQUEST);
 
-    const { data: data, error: error } = await supabase.auth.getUser();
-    if (error) return next(new CustomError(errors.invalidUser, 400));
+    const { data: userData, error: userError } = await supabase.auth.getUser();
+    if (userError)
+      throw new CustomError(errors.invalidUser, HttpStatusCode.BAD_REQUEST);
 
     await db.transaction(async (tx) => {
       const [profile] = await tx
         .select()
         .from(profiles)
-        .where(eq(profiles.id, data.user.id));
+        .where(eq(profiles.id, userData.user.id));
 
-      if (!profile) return next(new CustomError(errors.invalidUser, 400));
+      if (!profile)
+        throw new CustomError(errors.invalidUser, HttpStatusCode.BAD_REQUEST);
 
       const folder = await tx
         .select()
         .from(folders)
         .where(eq(folders.parentId, parentId));
-      if (!folder) return next(new CustomError(errors.folderNotFound, 400));
+      if (!folder)
+        throw new CustomError(errors.folderNotFound, HttpStatusCode.NOT_FOUND);
 
-      res.status(200).json({
+      res.status(HttpStatusCode.OK).json({
         message: successMessages.successRetrieveFolders,
         data: folder,
       });
@@ -99,7 +110,7 @@ export const getFolders = async (
     if (e.constructor.name === "DrizzleQueryError") {
       next(new DrizzleErrorCode(e.cause.code));
     } else {
-      next(new CustomError(e.message, 500));
+      next(e);
     }
   }
 };
@@ -112,38 +123,43 @@ export const updateFolder = async (
   try {
     const { id, name } = req.body;
 
-    if (!id) return next(new CustomError(errors.folderIdMissing, 400));
+    if (!id)
+      throw new CustomError(errors.folderIdMissing, HttpStatusCode.BAD_REQUEST);
 
-    if (!name) return next(new CustomError(errors.nameMissing, 400));
+    if (!name)
+      throw new CustomError(errors.nameMissing, HttpStatusCode.BAD_REQUEST);
 
-    const { data: data, error: error } = await supabase.auth.getUser();
-    if (error) return next(new CustomError(errors.invalidUser, 400));
+    const { data: userData, error: userError } = await supabase.auth.getUser();
+    if (userError)
+      throw new CustomError(errors.invalidUser, HttpStatusCode.BAD_REQUEST);
 
     await db.transaction(async (tx) => {
       const [profile] = await tx
         .select()
         .from(profiles)
-        .where(eq(profiles.id, data.user.id));
+        .where(eq(profiles.id, userData.user.id));
 
-      if (!profile) return next(new CustomError(errors.invalidUser, 400));
+      if (!profile)
+        throw new CustomError(errors.invalidUser, HttpStatusCode.BAD_REQUEST);
 
       const [folder] = await tx
         .update(folders)
         .set({ name: name })
-        .where(and(eq(folders.userId, data.user.id), eq(folders.id, id)))
+        .where(and(eq(folders.userId, userData.user.id), eq(folders.id, id)))
         .returning();
 
-      if (!folder) return next(new CustomError(errors.folderNotFound, 404));
+      if (!folder)
+        throw new CustomError(errors.folderNotFound, HttpStatusCode.NOT_FOUND);
 
       res
-        .status(201)
+        .status(HttpStatusCode.OK)
         .json({ message: successMessages.successUpdateFolder, data: folder });
     });
   } catch (e: any) {
     if (e.constructor.name === "DrizzleQueryError") {
       next(new DrizzleErrorCode(e.cause.code));
     } else {
-      next(new CustomError(e.message, 500));
+      next(e);
     }
   }
 };
@@ -156,41 +172,45 @@ export const deleteFolder = async (
   try {
     const { id } = req.params;
 
-    if (!id) return next(new CustomError(errors.folderIdMissing, 400));
+    if (!id)
+      throw new CustomError(errors.folderIdMissing, HttpStatusCode.BAD_REQUEST);
 
-    const { data: data, error: error } = await supabase.auth.getUser();
-    if (error) return next(new CustomError(errors.invalidUser, 400));
+    const { data: userData, error: userError } = await supabase.auth.getUser();
+    if (userError)
+      throw new CustomError(errors.invalidUser, HttpStatusCode.BAD_REQUEST);
 
     await db.transaction(async (tx) => {
       const [profile] = await tx
         .select()
         .from(profiles)
-        .where(eq(profiles.id, data.user.id));
+        .where(eq(profiles.id, userData.user.id));
 
-      if (!profile) return next(new CustomError(errors.invalidUser, 400));
+      if (!profile)
+        throw new CustomError(errors.invalidUser, HttpStatusCode.BAD_REQUEST);
 
       const [folder] = await tx
         .update(folders)
         .set({ isDeleted: true })
         .where(
           and(
-            eq(folders.userId, data.user.id),
+            eq(folders.userId, userData.user.id),
             eq(folders.id, id),
             eq(folders.isDeleted, false)
           )
         )
         .returning();
-      if (!folder) return next(new CustomError(errors.folderNotFound, 404));
+      if (!folder)
+        throw new CustomError(errors.folderNotFound, HttpStatusCode.NOT_FOUND);
 
       return res
-        .status(201)
+        .status(HttpStatusCode.OK)
         .json({ message: successMessages.successDeleteFolder, data: folder });
     });
   } catch (e: any) {
     if (e.constructor.name === "DrizzleQueryError") {
       next(new DrizzleErrorCode(e.cause.code));
     } else {
-      next(new CustomError(e.message, 500));
+      next(e);
     }
   }
 };
@@ -202,18 +222,22 @@ export const restoreFolder = async (
 ) => {
   try {
     const { id } = req.body;
-    if (!id) return next(new CustomError(errors.invalidUser, 400));
+    if (!id)
+      throw new CustomError(errors.invalidUser, HttpStatusCode.BAD_REQUEST);
 
-    const { data: data, error: error } = await supabase.auth.getUser();
-    console.log(error);
-    if (error) return next(new CustomError(errors.invalidUser, 400));
+    const { data: userData, error: userError } = await supabase.auth.getUser();
+    if (userError)
+      return next(
+        new CustomError(errors.invalidUser, HttpStatusCode.BAD_REQUEST)
+      );
 
     await db.transaction(async (tx) => {
       const [profile] = await tx
         .select()
         .from(profiles)
-        .where(eq(profiles.id, data.user.id));
-      if (!profile) return next(new CustomError(errors.invalidUser, 400));
+        .where(eq(profiles.id, userData.user.id));
+      if (!profile)
+        throw new CustomError(errors.invalidUser, HttpStatusCode.BAD_REQUEST);
 
       const [folder] = await tx
         .update(folders)
@@ -225,17 +249,18 @@ export const restoreFolder = async (
             eq(folders.isDeleted, true)
           )
         );
-      if (!folder) return next(new CustomError(errors.folderNotFound, 400));
+      if (!folder)
+        throw new CustomError(errors.folderNotFound, HttpStatusCode.NOT_FOUND);
 
       res
-        .status(201)
+        .status(HttpStatusCode.OK)
         .json({ message: successMessages.successRestoreFolder, data: folder });
     });
   } catch (e: any) {
     if (e.constructor.name === "DrizzleCustomError") {
       next(new DrizzleErrorCode(e.cause.code));
     } else {
-      next(new CustomError(e.message, 500));
+      next(e);
     }
   }
 };
