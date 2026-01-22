@@ -7,7 +7,7 @@ import { successMessages } from "../utils/successMessages";
 import { v4 as uuidv4 } from "uuid";
 import { db } from "..";
 import { profiles } from "../models/profiles";
-import { eq, and } from "drizzle-orm";
+import { eq, and, ilike } from "drizzle-orm";
 import { files } from "../models/files";
 import { DrizzleErrorCode } from "../types/drizzleError";
 import { folders } from "../models/folders";
@@ -16,7 +16,7 @@ import { HttpStatusCode } from "../types/httpStatusCode";
 export const uploadFile = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ) => {
   try {
     const { folderId } = req.body;
@@ -73,7 +73,7 @@ export const uploadFile = async (
       if (!fileData)
         throw new CustomError(
           errors.uploadFileFailed,
-          HttpStatusCode.BAD_REQUEST
+          HttpStatusCode.BAD_REQUEST,
         );
 
       res
@@ -92,10 +92,11 @@ export const uploadFile = async (
 export const getFiles = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ) => {
   try {
     const { id } = req.params;
+    const { name } = req.query;
 
     if (!id)
       throw new CustomError(errors.folderIdMissing, HttpStatusCode.BAD_REQUEST);
@@ -114,16 +115,31 @@ export const getFiles = async (
       if (!profile)
         throw new CustomError(errors.invalidUser, HttpStatusCode.BAD_REQUEST);
 
-      const file = await tx
-        .select()
-        .from(files)
-        .where(
-          and(
-            eq(files.folderId, id),
-            eq(files.userId, userData.user.id),
-            eq(files.isDeleted, false)
-          )
-        );
+      var file;
+      if (!name) {
+        file = await tx
+          .select()
+          .from(files)
+          .where(
+            and(
+              eq(files.folderId, id),
+              eq(files.userId, userData.user.id),
+              eq(files.isDeleted, false),
+            ),
+          );
+      } else {
+        file = await tx
+          .select()
+          .from(files)
+          .where(
+            and(
+              eq(files.folderId, id),
+              eq(files.userId, userData.user.id),
+              eq(files.isDeleted, false),
+              ilike(files.name, `%${name}%`),
+            ),
+          );
+      }
 
       res
         .status(HttpStatusCode.OK)
@@ -141,7 +157,7 @@ export const getFiles = async (
 export const updateName = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ) => {
   try {
     const { id, name } = req.body;
@@ -190,7 +206,7 @@ export const updateName = async (
 export const deleteFile = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ) => {
   try {
     const { id } = req.params;
@@ -219,8 +235,8 @@ export const deleteFile = async (
           and(
             eq(files.id, id),
             eq(files.userId, userData.user.id),
-            eq(files.isDeleted, false)
-          )
+            eq(files.isDeleted, false),
+          ),
         )
         .returning();
 
@@ -243,7 +259,7 @@ export const deleteFile = async (
 export const restoreFile = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ) => {
   try {
     const { id } = req.body;
@@ -269,8 +285,8 @@ export const restoreFile = async (
           and(
             eq(files.isDeleted, true),
             eq(files.userId, profile.id),
-            eq(files.id, id)
-          )
+            eq(files.id, id),
+          ),
         )
         .returning();
       if (!file)
@@ -292,7 +308,7 @@ export const restoreFile = async (
 export const moveFile = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ) => {
   try {
     const { oldId, newId } = req.body;
@@ -315,7 +331,7 @@ export const moveFile = async (
         .update(files)
         .set({ folderId: newId })
         .where(
-          and(eq(files.folderId, oldId), eq(files.userId, userData.user.id))
+          and(eq(files.folderId, oldId), eq(files.userId, userData.user.id)),
         )
         .returning();
 
@@ -338,7 +354,7 @@ export const moveFile = async (
 export const getDeletedFiles = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ) => {
   try {
     const { id } = req.params;
@@ -367,8 +383,8 @@ export const getDeletedFiles = async (
           and(
             eq(files.folderId, id),
             eq(files.userId, userData.user.id),
-            eq(files.isDeleted, true)
-          )
+            eq(files.isDeleted, true),
+          ),
         );
 
       res
@@ -387,7 +403,7 @@ export const getDeletedFiles = async (
 export const downloadFile = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ) => {
   try {
     const { id } = req.params;
@@ -415,8 +431,8 @@ export const downloadFile = async (
           and(
             eq(files.userId, userData.user.id),
             eq(files.id, id),
-            eq(files.isDeleted, false)
-          )
+            eq(files.isDeleted, false),
+          ),
         );
 
       if (!file)
@@ -448,14 +464,14 @@ export const downloadFile = async (
 export const selectFavourites = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ) => {
   try {
     const { id } = req.params;
 
     if (!id)
       return next(
-        new CustomError(errors.idMissing, HttpStatusCode.BAD_REQUEST)
+        new CustomError(errors.idMissing, HttpStatusCode.BAD_REQUEST),
       );
 
     const { data: userData, error: userError } = await supabase.auth.getUser();
@@ -485,8 +501,8 @@ export const selectFavourites = async (
           and(
             eq(files.folderId, id),
             eq(files.userId, userData.user.id),
-            eq(files.isFavourite, true)
-          )
+            eq(files.isFavourite, true),
+          ),
         );
 
       res
@@ -505,7 +521,7 @@ export const selectFavourites = async (
 export const addFavourite = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ) => {
   try {
     const { id } = req.body;
@@ -533,8 +549,8 @@ export const addFavourite = async (
           and(
             eq(files.userId, userData.user.id),
             eq(files.id, id),
-            eq(files.isFavourite, false)
-          )
+            eq(files.isFavourite, false),
+          ),
         )
         .returning();
       if (!file)
@@ -556,7 +572,7 @@ export const addFavourite = async (
 export const removeFavourite = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ) => {
   try {
     const { id } = req.body;
@@ -584,8 +600,8 @@ export const removeFavourite = async (
           and(
             eq(files.userId, userData.user.id),
             eq(files.id, id),
-            eq(files.isFavourite, true)
-          )
+            eq(files.isFavourite, true),
+          ),
         )
         .returning();
       if (!file)

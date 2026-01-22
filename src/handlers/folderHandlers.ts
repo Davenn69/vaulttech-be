@@ -5,7 +5,7 @@ import { supabase } from "../utils/supabase";
 import { successMessages } from "../utils/successMessages";
 import { db } from "..";
 import { profiles } from "../models/profiles";
-import { and, eq } from "drizzle-orm";
+import { and, eq, ilike } from "drizzle-orm";
 import { folders } from "../models/folders";
 import { DrizzleErrorCode } from "../types/drizzleError";
 import { HttpStatusCode } from "../types/httpStatusCode";
@@ -78,6 +78,7 @@ export const getFolders = async (
 ) => {
   try {
     const { parentId } = req.params;
+    const { name } = req.query;
 
     if (!parentId)
       throw new CustomError(errors.folderIdMissing, HttpStatusCode.BAD_REQUEST);
@@ -95,16 +96,32 @@ export const getFolders = async (
       if (!profile)
         throw new CustomError(errors.invalidUser, HttpStatusCode.BAD_REQUEST);
 
-      const folder = await tx
-        .select()
-        .from(folders)
-        .where(
-          and(
-            eq(folders.parentId, parentId),
-            eq(folders.userId, profile.id),
-            eq(folders.isDeleted, false),
-          ),
-        );
+      var folder;
+      if (!name) {
+        folder = await tx
+          .select()
+          .from(folders)
+          .where(
+            and(
+              eq(folders.parentId, parentId),
+              eq(folders.userId, profile.id),
+              eq(folders.isDeleted, false),
+            ),
+          );
+      } else {
+        folder = await tx
+          .select()
+          .from(folders)
+          .where(
+            and(
+              eq(folders.parentId, parentId),
+              eq(folders.userId, profile.id),
+              eq(folders.isDeleted, false),
+              ilike(folders.name, `%${name}%`),
+            ),
+          );
+      }
+
       if (!folder)
         throw new CustomError(errors.folderNotFound, HttpStatusCode.NOT_FOUND);
 
