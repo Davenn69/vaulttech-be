@@ -357,12 +357,58 @@ export const removeFavourite = async (
 
       if (!folder) throw new CustomError(errors.folderNotFound, 404);
 
-      res
-        .status(HttpStatusCode.OK)
-        .json({
-          message: successMessages.successRemoveFavourite,
-          data: folder,
-        });
+      res.status(HttpStatusCode.OK).json({
+        message: successMessages.successRemoveFavourite,
+        data: folder,
+      });
+    });
+  } catch (e: any) {
+    if (e.constructor.name === "DrizzleCustomError") {
+      next(new DrizzleErrorCode(e.cause.code));
+    } else {
+      next(e);
+    }
+  }
+};
+
+export const getFavouriteFolders = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    const { id } = req.params;
+    if (!id)
+      throw new CustomError(errors.idMissing, HttpStatusCode.BAD_REQUEST);
+
+    const { data: userData, error: userError } = await supabase.auth.getUser();
+    if (userError)
+      throw new CustomError(errors.invalidUser, HttpStatusCode.BAD_REQUEST);
+
+    await db.transaction(async (tx) => {
+      const [profile] = await tx
+        .select()
+        .from(profiles)
+        .where(eq(profiles.id, userData.user.id));
+
+      if (!profile)
+        throw new CustomError(errors.invalidUser, HttpStatusCode.BAD_REQUEST);
+
+      const folder = await tx
+        .select()
+        .from(folders)
+        .where(
+          and(
+            eq(folders.parentId, id),
+            eq(folders.userId, profiles.id),
+            eq(folders.isFavourite, true),
+          ),
+        );
+
+      res.status(HttpStatusCode.OK).json({
+        message: successMessages.successRetrieveFolders,
+        data: folder,
+      });
     });
   } catch (e: any) {
     if (e.constructor.name === "DrizzleCustomError") {
