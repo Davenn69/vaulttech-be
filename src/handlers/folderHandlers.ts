@@ -400,7 +400,7 @@ export const getFavouriteFolders = async (
         .where(
           and(
             eq(folders.parentId, id),
-            eq(folders.userId, profiles.id),
+            eq(folders.userId, profile.id),
             eq(folders.isFavourite, true),
           ),
         );
