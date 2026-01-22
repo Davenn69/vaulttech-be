@@ -98,7 +98,13 @@ export const getFolders = async (
       const folder = await tx
         .select()
         .from(folders)
-        .where(eq(folders.parentId, parentId));
+        .where(
+          and(
+            eq(folders.parentId, parentId),
+            eq(folders.userId, profile.id),
+            eq(folders.isDeleted, false),
+          ),
+        );
       if (!folder)
         throw new CustomError(errors.folderNotFound, HttpStatusCode.NOT_FOUND);
 
