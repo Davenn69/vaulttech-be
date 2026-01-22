@@ -317,3 +317,58 @@ export const addFavourite = async (
     }
   }
 };
+
+export const removeFavourite = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    const { id } = req.body;
+
+    if (!id)
+      throw new CustomError(errors.folderIdMissing, HttpStatusCode.BAD_REQUEST);
+
+    const { data: userData, error: userError } = await supabase.auth.getUser();
+
+    if (userError)
+      throw new CustomError(errors.invalidUser, HttpStatusCode.BAD_REQUEST);
+
+    await db.transaction(async (tx) => {
+      const [profile] = await tx
+        .select()
+        .from(profiles)
+        .where(eq(profiles.id, userData.user.id));
+
+      if (!profile)
+        throw new CustomError(errors.invalidUser, HttpStatusCode.BAD_REQUEST);
+
+      const [folder] = await tx
+        .update(folders)
+        .set({ isFavourite: false })
+        .where(
+          and(
+            eq(folders.id, id),
+            eq(folders.userId, profile.id),
+            eq(folders.isFavourite, true),
+          ),
+        )
+        .returning();
+
+      if (!folder) throw new CustomError(errors.folderNotFound, 404);
+
+      res
+        .status(HttpStatusCode.OK)
+        .json({
+          message: successMessages.successRemoveFavourite,
+          data: folder,
+        });
+    });
+  } catch (e: any) {
+    if (e.constructor.name === "DrizzleCustomError") {
+      next(new DrizzleErrorCode(e.cause.code));
+    } else {
+      next(e);
+    }
+  }
+};
