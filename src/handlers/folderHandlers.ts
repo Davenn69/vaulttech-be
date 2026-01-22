@@ -9,7 +9,6 @@ import { and, eq, ilike } from "drizzle-orm";
 import { folders } from "../models/folders";
 import { DrizzleErrorCode } from "../types/drizzleError";
 import { HttpStatusCode } from "../types/httpStatusCode";
-import { error } from "console";
 
 export const createFolder = async (
   req: Request,
