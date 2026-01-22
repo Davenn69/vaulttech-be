@@ -9,11 +9,12 @@ import { and, eq } from "drizzle-orm";
 import { folders } from "../models/folders";
 import { DrizzleErrorCode } from "../types/drizzleError";
 import { HttpStatusCode } from "../types/httpStatusCode";
+import { error } from "console";
 
 export const createFolder = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ) => {
   try {
     const { parentId, name } = req.body;
@@ -43,7 +44,7 @@ export const createFolder = async (
         .where(eq(folders.id, parentId));
       if (!parentFolder)
         return next(
-          new CustomError(errors.folderNotFound, HttpStatusCode.NOT_FOUND)
+          new CustomError(errors.folderNotFound, HttpStatusCode.NOT_FOUND),
         );
 
       const [folder] = await tx
@@ -73,7 +74,7 @@ export const createFolder = async (
 export const getFolders = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ) => {
   try {
     const { parentId } = req.params;
@@ -118,7 +119,7 @@ export const getFolders = async (
 export const updateFolder = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ) => {
   try {
     const { id, name } = req.body;
@@ -167,7 +168,7 @@ export const updateFolder = async (
 export const deleteFolder = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ) => {
   try {
     const { id } = req.params;
@@ -195,8 +196,8 @@ export const deleteFolder = async (
           and(
             eq(folders.userId, userData.user.id),
             eq(folders.id, id),
-            eq(folders.isDeleted, false)
-          )
+            eq(folders.isDeleted, false),
+          ),
         )
         .returning();
       if (!folder)
@@ -218,7 +219,7 @@ export const deleteFolder = async (
 export const restoreFolder = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ) => {
   try {
     const { id } = req.body;
@@ -228,7 +229,7 @@ export const restoreFolder = async (
     const { data: userData, error: userError } = await supabase.auth.getUser();
     if (userError)
       return next(
-        new CustomError(errors.invalidUser, HttpStatusCode.BAD_REQUEST)
+        new CustomError(errors.invalidUser, HttpStatusCode.BAD_REQUEST),
       );
 
     await db.transaction(async (tx) => {
@@ -246,8 +247,8 @@ export const restoreFolder = async (
           and(
             eq(folders.id, id),
             eq(folders.userId, profile.id),
-            eq(folders.isDeleted, true)
-          )
+            eq(folders.isDeleted, true),
+          ),
         );
       if (!folder)
         throw new CustomError(errors.folderNotFound, HttpStatusCode.NOT_FOUND);
@@ -255,6 +256,58 @@ export const restoreFolder = async (
       res
         .status(HttpStatusCode.OK)
         .json({ message: successMessages.successRestoreFolder, data: folder });
+    });
+  } catch (e: any) {
+    if (e.constructor.name === "DrizzleCustomError") {
+      next(new DrizzleErrorCode(e.cause.code));
+    } else {
+      next(e);
+    }
+  }
+};
+
+export const addFavourite = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    const { id } = req.body;
+
+    if (!id)
+      throw new CustomError(errors.folderIdMissing, HttpStatusCode.BAD_REQUEST);
+
+    const { data: userData, error: userError } = await supabase.auth.getUser();
+
+    if (userError)
+      throw new CustomError(errors.invalidUser, HttpStatusCode.BAD_REQUEST);
+
+    await db.transaction(async (tx) => {
+      const [profile] = await tx
+        .select()
+        .from(profiles)
+        .where(eq(profiles.id, userData.user.id));
+
+      if (!profile)
+        throw new CustomError(errors.invalidUser, HttpStatusCode.BAD_REQUEST);
+
+      const [folder] = await tx
+        .update(folders)
+        .set({ isFavourite: true })
+        .where(
+          and(
+            eq(folders.id, id),
+            eq(folders.userId, profile.id),
+            eq(folders.isFavourite, false),
+          ),
+        )
+        .returning();
+
+      if (!folder) throw new CustomError(errors.folderNotFound, 404);
+
+      res
+        .status(HttpStatusCode.OK)
+        .json({ message: successMessages.successAddFavourite, data: folder });
     });
   } catch (e: any) {
     if (e.constructor.name === "DrizzleCustomError") {
