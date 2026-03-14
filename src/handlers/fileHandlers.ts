@@ -7,11 +7,12 @@ import { successMessages } from "../utils/successMessages";
 import { v4 as uuidv4 } from "uuid";
 import { db } from "..";
 import { profiles } from "../models/profiles";
-import { eq, and, ilike } from "drizzle-orm";
+import { eq, and, ilike, count, SQL, desc, asc } from "drizzle-orm";
 import { files } from "../models/files";
 import { DrizzleErrorCode } from "../types/drizzleError";
 import { folders } from "../models/folders";
 import { HttpStatusCode } from "../types/httpStatusCode";
+import { PaginationParams } from "../types/pagination";
 
 export const uploadFile = async (
   req: Request,
@@ -96,7 +97,24 @@ export const getFiles = async (
 ) => {
   try {
     const { id } = req.params;
-    const { name } = req.query;
+    const {
+      page = 1,
+      limit = 10,
+      sort_order = "asc",
+      search = "",
+    } = req.query as PaginationParams;
+
+    if (page < 1 || limit < 1) {
+      throw new CustomError(
+        errors.negativePageNumbers,
+        HttpStatusCode.BAD_REQUEST,
+      );
+    }
+
+    const limitNum = Number(limit);
+    const pageNum = Number(page);
+
+    const offset = (pageNum - 1) * limitNum;
 
     if (!id)
       throw new CustomError(errors.folderIdMissing, HttpStatusCode.BAD_REQUEST);
@@ -115,35 +133,45 @@ export const getFiles = async (
       if (!profile)
         throw new CustomError(errors.invalidUser, HttpStatusCode.BAD_REQUEST);
 
-      var file;
-      if (!name) {
-        file = await tx
-          .select()
-          .from(files)
-          .where(
-            and(
-              eq(files.folderId, id),
-              eq(files.userId, userData.user.id),
-              eq(files.isDeleted, false),
-            ),
-          );
-      } else {
-        file = await tx
-          .select()
-          .from(files)
-          .where(
-            and(
-              eq(files.folderId, id),
-              eq(files.userId, userData.user.id),
-              eq(files.isDeleted, false),
-              ilike(files.name, `%${name}%`),
-            ),
-          );
+      const fileQueryConditions: SQL[] = [
+        eq(files.folderId, id),
+        eq(files.userId, userData.user.id),
+        eq(files.isDeleted, false),
+      ];
+
+      if (search) {
+        fileQueryConditions.push(ilike(files.name, `%${search}%`));
       }
 
-      res
-        .status(HttpStatusCode.OK)
-        .json({ message: successMessages.successRetrieveFiles, data: file });
+      const countQuery = await tx
+        .select({ total: count() })
+        .from(files)
+        .where(and(...fileQueryConditions));
+      const totalItems = countQuery[0]!.total;
+
+      const file = await tx
+        .select()
+        .from(files)
+        .limit(limitNum)
+        .offset(offset)
+        .orderBy(sort_order === "desc" ? desc(files.name) : asc(files.name))
+        .where(and(...fileQueryConditions));
+
+      const totalPages = Math.ceil(totalItems / limitNum);
+      const hasNextPage = pageNum < totalPages;
+      const hasPrevPage = pageNum > 1;
+
+      res.status(HttpStatusCode.OK).json({
+        message: successMessages.successRetrieveFiles,
+        meta: {
+          current_page: page,
+          total_items: totalItems,
+          total_pages: totalPages,
+          has_next_page: hasNextPage,
+          has_prev_page: hasPrevPage,
+        },
+        data: file,
+      });
     });
   } catch (e: any) {
     if (e.constructor.name === "DrizzleQueryError") {
