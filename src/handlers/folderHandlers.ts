@@ -9,6 +9,7 @@ import { and, eq, ilike } from "drizzle-orm";
 import { folders } from "../models/folders";
 import { DrizzleErrorCode } from "../types/drizzleError";
 import { HttpStatusCode } from "../types/httpStatusCode";
+import { validateToken } from "../middlewares/protected";
 
 export const createFolder = async (
   req: Request,
@@ -24,9 +25,7 @@ export const createFolder = async (
     if (!name)
       throw new CustomError(errors.nameMissing, HttpStatusCode.BAD_REQUEST);
 
-    const { data: userData, error: userError } = await supabase.auth.getUser();
-    if (userError)
-      throw new CustomError(errors.invalidUser, HttpStatusCode.BAD_REQUEST);
+    const userData = await validateToken(req.headers.authorization);
 
     await db.transaction(async (tx) => {
       const [profile] = await tx
@@ -82,9 +81,7 @@ export const getFolders = async (
     if (!parentId)
       throw new CustomError(errors.folderIdMissing, HttpStatusCode.BAD_REQUEST);
 
-    const { data: userData, error: userError } = await supabase.auth.getUser();
-    if (userError)
-      throw new CustomError(errors.invalidUser, HttpStatusCode.BAD_REQUEST);
+    const userData = await validateToken(req.headers.authorization);
 
     await db.transaction(async (tx) => {
       const [profile] = await tx
@@ -152,9 +149,7 @@ export const updateFolder = async (
     if (!name)
       throw new CustomError(errors.nameMissing, HttpStatusCode.BAD_REQUEST);
 
-    const { data: userData, error: userError } = await supabase.auth.getUser();
-    if (userError)
-      throw new CustomError(errors.invalidUser, HttpStatusCode.BAD_REQUEST);
+    const userData = await validateToken(req.headers.authorization);
 
     await db.transaction(async (tx) => {
       const [profile] = await tx
@@ -198,9 +193,7 @@ export const deleteFolder = async (
     if (!id)
       throw new CustomError(errors.folderIdMissing, HttpStatusCode.BAD_REQUEST);
 
-    const { data: userData, error: userError } = await supabase.auth.getUser();
-    if (userError)
-      throw new CustomError(errors.invalidUser, HttpStatusCode.BAD_REQUEST);
+    const userData = await validateToken(req.headers.authorization);
 
     await db.transaction(async (tx) => {
       const [profile] = await tx
@@ -248,11 +241,7 @@ export const restoreFolder = async (
     if (!id)
       throw new CustomError(errors.invalidUser, HttpStatusCode.BAD_REQUEST);
 
-    const { data: userData, error: userError } = await supabase.auth.getUser();
-    if (userError)
-      return next(
-        new CustomError(errors.invalidUser, HttpStatusCode.BAD_REQUEST),
-      );
+    const userData = await validateToken(req.headers.authorization);
 
     await db.transaction(async (tx) => {
       const [profile] = await tx
@@ -299,10 +288,7 @@ export const addFavourite = async (
     if (!id)
       throw new CustomError(errors.folderIdMissing, HttpStatusCode.BAD_REQUEST);
 
-    const { data: userData, error: userError } = await supabase.auth.getUser();
-
-    if (userError)
-      throw new CustomError(errors.invalidUser, HttpStatusCode.BAD_REQUEST);
+    const userData = await validateToken(req.headers.authorization);
 
     await db.transaction(async (tx) => {
       const [profile] = await tx
@@ -351,10 +337,7 @@ export const removeFavourite = async (
     if (!id)
       throw new CustomError(errors.folderIdMissing, HttpStatusCode.BAD_REQUEST);
 
-    const { data: userData, error: userError } = await supabase.auth.getUser();
-
-    if (userError)
-      throw new CustomError(errors.invalidUser, HttpStatusCode.BAD_REQUEST);
+    const userData = await validateToken(req.headers.authorization);
 
     await db.transaction(async (tx) => {
       const [profile] = await tx
@@ -403,9 +386,7 @@ export const getFavouriteFolders = async (
     if (!id)
       throw new CustomError(errors.idMissing, HttpStatusCode.BAD_REQUEST);
 
-    const { data: userData, error: userError } = await supabase.auth.getUser();
-    if (userError)
-      throw new CustomError(errors.invalidUser, HttpStatusCode.BAD_REQUEST);
+    const userData = await validateToken(req.headers.authorization);
 
     await db.transaction(async (tx) => {
       const [profile] = await tx
