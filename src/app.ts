@@ -1,30 +1,41 @@
-import express, { NextFunction, Request, Response } from "express"
-import logger from "./middlewares/logger"
-import errorHandler from "./middlewares/error"
-import authRoutes from "./routes/authRoutes"
-import fileRoute from "./routes/fileRoutes"
-import folderRoute from "./routes/folderRoutes"
-import multer from "multer"
-import { protect } from "./middlewares/protected"
-import { notFound } from "./middlewares/notFound"
-import { drizzleError } from "./middlewares/postgresError"
+import express, { NextFunction, Request, Response } from "express";
+import logger from "./middlewares/logger";
+import errorHandler from "./middlewares/error";
+import authRoutes from "./routes/authRoutes";
+import fileRoute from "./routes/fileRoutes";
+import folderRoute from "./routes/folderRoutes";
+import multer from "multer";
+import { protect } from "./middlewares/protected";
+import { notFound } from "./middlewares/notFound";
+import { drizzleError } from "./middlewares/postgresError";
+import cors from "cors";
+import cookieParser from "cookie-parser";
 
-const app = express()
+const app = express();
 
-app.use(express.json())
-app.use(express.urlencoded({ extended: true }))
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+app.use(cookieParser());
 
-app.use(logger)
+//Added Cors policy (Remove when done)
+app.use(
+  cors({
+    origin: "http://192.168.126.1:3000",
+    credentials: true,
+  }),
+);
+
+app.use(logger);
 
 //handlers
-app.use("/api/v1/auth", authRoutes)
-app.use("/api/v1/file", protect, fileRoute)
-app.use("/api/v1/folder", protect, folderRoute)
+app.use("/api/v1/auth", authRoutes);
+app.use("/api/v1/file", protect, fileRoute);
+app.use("/api/v1/folder", protect, folderRoute);
 //
 
-app.use(drizzleError)
-app.use(errorHandler)
+app.use(drizzleError);
+app.use(errorHandler);
 
-app.use(notFound)
+app.use(notFound);
 
-export default app
+export default app;
