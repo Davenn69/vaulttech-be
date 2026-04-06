@@ -1,31 +1,34 @@
 class ErrorMessages {
-    notFound: string = "route not found"
-    missingBody: string = "missing body parameter"
+  negativePageNumbers: string = "page number must be a positive value";
 
-    emailMissing: string = "missing email parameter"
-    emailCheck: string = "email must be valid"
+  notFound: string = "route not found";
+  missingBody: string = "missing body parameter";
 
-    passwordMissing: string = "missing password parameter"
-    passwordLength: string = "password must have 30 characters or less"
-    passwordCheck: string = "password must have 1 uppercase, 1 lowercase, 1 number, 1 special char"
+  emailMissing: string = "missing email parameter";
+  emailCheck: string = "email must be valid";
 
-    usernameMissing: string = "missing username parameter"
-    usernameLength: string = "username must have 30 characters or less"
+  passwordMissing: string = "missing password parameter";
+  passwordLength: string = "password must have 30 characters or less";
+  passwordCheck: string =
+    "password must have 1 uppercase, 1 lowercase, 1 number, 1 special char";
 
-    idMissing: string = "missing id parameter"
+  usernameMissing: string = "missing username parameter";
+  usernameLength: string = "username must have 30 characters or less";
 
-    tokenMissing: string = "token is not provided"
-    invalidUser: string = "invalid user"
-    fileMissing: string = "missing file parameter"
+  idMissing: string = "missing id parameter";
 
-    folderIdMissing: string = "missing folder id parameter"
-    nameMissing: string = "missing name parameter"
+  tokenMissing: string = "token is not provided";
+  invalidUser: string = "invalid user";
+  fileMissing: string = "missing file parameter";
 
-    fileNotFound: string = "file not found"
-    folderNotFound: string = "folder not found"
+  folderIdMissing: string = "missing folder id parameter";
+  nameMissing: string = "missing name parameter";
 
-    uploadFileFailed: string = "unable to upload file"
-    downloadFileFailed: string = "unable to download file"
+  fileNotFound: string = "file not found";
+  folderNotFound: string = "folder not found";
+
+  uploadFileFailed: string = "unable to upload file";
+  downloadFileFailed: string = "unable to download file";
 }
 
-export const errors = new ErrorMessages()
+export const errors = new ErrorMessages();
