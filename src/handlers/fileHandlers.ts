@@ -13,6 +13,7 @@ import { DrizzleErrorCode } from "../types/drizzleError";
 import { folders } from "../models/folders";
 import { HttpStatusCode } from "../types/httpStatusCode";
 import { PaginationParams } from "../types/pagination";
+import { validateToken } from "../middlewares/protected";
 
 export const uploadFile = async (
   req: Request,
@@ -27,9 +28,7 @@ export const uploadFile = async (
     if (!folderId)
       throw new CustomError(errors.folderIdMissing, HttpStatusCode.BAD_REQUEST);
 
-    const { data: userData, error: userError } = await supabase.auth.getUser();
-    if (userError)
-      throw new CustomError(errors.invalidUser, HttpStatusCode.BAD_REQUEST);
+    const userData = await validateToken(req.headers.authorization);
 
     await db.transaction(async (tx) => {
       const [profile] = await tx
@@ -48,6 +47,8 @@ export const uploadFile = async (
       const uniqueName = `${uuidv4()}.${fileExt}`;
       const filePath = `${profile.id}/${folderId}/${uniqueName}`;
 
+      console.log("wow");
+
       const { error: bucketError } = await supabase.storage
         .from("Documents")
         .upload(filePath, file.buffer, {
@@ -57,6 +58,8 @@ export const uploadFile = async (
 
       if (bucketError)
         throw new CustomError(bucketError.message, HttpStatusCode.BAD_REQUEST);
+
+      console.log("success");
 
       const [fileData] = await tx
         .insert(files)
@@ -119,9 +122,7 @@ export const getFiles = async (
     if (!id)
       throw new CustomError(errors.folderIdMissing, HttpStatusCode.BAD_REQUEST);
 
-    const { data: userData, error: userError } = await supabase.auth.getUser();
-    if (userError)
-      throw new CustomError(errors.invalidUser, HttpStatusCode.BAD_REQUEST);
+    const userData = await validateToken(req.headers.authorization);
 
     await db.transaction(async (tx) => {
       const [profile] = await tx
@@ -195,9 +196,7 @@ export const updateName = async (
     if (!name)
       throw new CustomError(errors.nameMissing, HttpStatusCode.BAD_REQUEST);
 
-    const { data: userData, error: userError } = await supabase.auth.getUser();
-    if (userError)
-      throw new CustomError(errors.invalidUser, HttpStatusCode.BAD_REQUEST);
+    const userData = await validateToken(req.headers.authorization);
 
     await db.transaction(async (tx) => {
       const [profile] = await tx
@@ -242,9 +241,7 @@ export const deleteFile = async (
     if (!id)
       throw new CustomError(errors.idMissing, HttpStatusCode.BAD_REQUEST);
 
-    const { data: userData, error: userError } = await supabase.auth.getUser();
-    if (userError)
-      throw new CustomError(errors.invalidUser, HttpStatusCode.BAD_REQUEST);
+    const userData = await validateToken(req.headers.authorization);
 
     await db.transaction(async (tx) => {
       const [profile] = await tx
@@ -294,9 +291,7 @@ export const restoreFile = async (
     if (!id)
       throw new CustomError(errors.idMissing, HttpStatusCode.BAD_REQUEST);
 
-    const { data: userData, error: userError } = await supabase.auth.getUser();
-    if (userError)
-      throw new CustomError(errors.invalidUser, HttpStatusCode.BAD_REQUEST);
+    const userData = await validateToken(req.headers.authorization);
 
     await db.transaction(async (tx) => {
       const [profile] = await tx
@@ -341,9 +336,7 @@ export const moveFile = async (
   try {
     const { oldId, newId } = req.body;
 
-    const { data: userData, error: userError } = await supabase.auth.getUser();
-    if (userError)
-      throw new CustomError(errors.invalidUser, HttpStatusCode.BAD_REQUEST);
+    const userData = await validateToken(req.headers.authorization);
 
     await db.transaction(async (tx) => {
       const [profile] = await tx
@@ -390,9 +383,7 @@ export const getDeletedFiles = async (
     if (!id)
       throw new CustomError(errors.folderIdMissing, HttpStatusCode.BAD_REQUEST);
 
-    const { data: userData, error: userError } = await supabase.auth.getUser();
-    if (userError)
-      throw new CustomError(errors.invalidUser, HttpStatusCode.BAD_REQUEST);
+    const userData = await validateToken(req.headers.authorization);
 
     await db.transaction(async (tx) => {
       const [profile] = await tx
@@ -438,9 +429,7 @@ export const downloadFile = async (
     if (!id)
       throw new CustomError(errors.idMissing, HttpStatusCode.BAD_REQUEST);
 
-    const { data: userData, error: userError } = await supabase.auth.getUser();
-    if (userError)
-      throw new CustomError(errors.invalidUser, HttpStatusCode.BAD_REQUEST);
+    const userData = await validateToken(req.headers.authorization);
 
     await db.transaction(async (tx) => {
       const [profile] = await tx
@@ -502,9 +491,7 @@ export const selectFavourites = async (
         new CustomError(errors.idMissing, HttpStatusCode.BAD_REQUEST),
       );
 
-    const { data: userData, error: userError } = await supabase.auth.getUser();
-    if (userError)
-      throw new CustomError(errors.invalidUser, HttpStatusCode.BAD_REQUEST);
+    const userData = await validateToken(req.headers.authorization);
 
     await db.transaction(async (tx) => {
       const [profile] = await tx
@@ -557,9 +544,7 @@ export const addFavourite = async (
     if (!id)
       throw new CustomError(errors.idMissing, HttpStatusCode.BAD_REQUEST);
 
-    const { data: userData, error: userError } = await supabase.auth.getUser();
-    if (userError)
-      throw new CustomError(errors.invalidUser, HttpStatusCode.BAD_REQUEST);
+    const userData = await validateToken(req.headers.authorization);
 
     await db.transaction(async (tx) => {
       const [profile] = await tx
@@ -608,9 +593,7 @@ export const removeFavourite = async (
     if (!id)
       throw new CustomError(errors.idMissing, HttpStatusCode.BAD_REQUEST);
 
-    const { data: userData, error: userError } = await supabase.auth.getUser();
-    if (userError)
-      throw new CustomError(errors.invalidUser, HttpStatusCode.BAD_REQUEST);
+    const userData = await validateToken(req.headers.authorization);
 
     await db.transaction(async (tx) => {
       const [profile] = await tx
