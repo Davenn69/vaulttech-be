@@ -27,6 +27,8 @@ class ErrorMessages {
   fileNotFound: string = "file not found";
   folderNotFound: string = "folder not found";
 
+  folderNotCreated: string = "folder not created";
+
   uploadFileFailed: string = "unable to upload file";
   downloadFileFailed: string = "unable to download file";
 }

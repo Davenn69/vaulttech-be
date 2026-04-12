@@ -27,7 +27,7 @@ export const createFolder = async (
 
     const userData = await validateToken(req.headers.authorization);
 
-    await db.transaction(async (tx) => {
+    const folder = await db.transaction(async (tx) => {
       const [profile] = await tx
         .select()
         .from(profiles)
@@ -39,13 +39,18 @@ export const createFolder = async (
       const [parentFolder] = await tx
         .select()
         .from(folders)
-        .where(eq(folders.id, parentId));
-      if (!parentFolder)
-        return next(
-          new CustomError(errors.folderNotFound, HttpStatusCode.NOT_FOUND),
+        .where(
+          and(
+            eq(folders.id, parentId),
+            eq(folders.userId, profile.id),
+            eq(folders.isDeleted, false),
+          ),
         );
 
-      const [folder] = await tx
+      if (!parentFolder)
+        throw new CustomError(errors.folderNotFound, HttpStatusCode.NOT_FOUND);
+
+      const [createdFolder] = await tx
         .insert(folders)
         .values({
           userId: profile.id,
@@ -56,9 +61,18 @@ export const createFolder = async (
         })
         .returning();
 
-      res
-        .status(HttpStatusCode.CREATED)
-        .json({ message: successMessages.successCreateFolder, data: folder });
+      if (!createdFolder)
+        throw new CustomError(
+          errors.folderNotCreated,
+          HttpStatusCode.BAD_REQUEST,
+        );
+
+      return createdFolder;
+    });
+
+    return res.status(HttpStatusCode.CREATED).json({
+      message: successMessages.successCreateFolder,
+      data: folder,
     });
   } catch (e: any) {
     if (e.constructor.name === "DrizzleQueryError") {
