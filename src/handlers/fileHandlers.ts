@@ -378,11 +378,6 @@ export const getDeletedFiles = async (
   next: NextFunction,
 ) => {
   try {
-    const { id } = req.params;
-
-    if (!id)
-      throw new CustomError(errors.folderIdMissing, HttpStatusCode.BAD_REQUEST);
-
     const userData = await validateToken(req.headers.authorization);
 
     await db.transaction(async (tx) => {
@@ -399,11 +394,7 @@ export const getDeletedFiles = async (
         .select()
         .from(files)
         .where(
-          and(
-            eq(files.folderId, id),
-            eq(files.userId, userData.user.id),
-            eq(files.isDeleted, true),
-          ),
+          and(eq(files.userId, userData.user.id), eq(files.isDeleted, true)),
         );
 
       res
@@ -484,13 +475,6 @@ export const selectFavourites = async (
   next: NextFunction,
 ) => {
   try {
-    const { id } = req.params;
-
-    if (!id)
-      return next(
-        new CustomError(errors.idMissing, HttpStatusCode.BAD_REQUEST),
-      );
-
     const userData = await validateToken(req.headers.authorization);
 
     await db.transaction(async (tx) => {
@@ -502,22 +486,11 @@ export const selectFavourites = async (
       if (!profile)
         throw new CustomError(errors.invalidUser, HttpStatusCode.BAD_REQUEST);
 
-      const [folder] = await tx
-        .select()
-        .from(folders)
-        .where(and(eq(folders.id, id), eq(folders.userId, profile.id)));
-      if (!folder)
-        throw new CustomError(errors.folderNotFound, HttpStatusCode.NOT_FOUND);
-
       const file = await tx
         .select()
         .from(files)
         .where(
-          and(
-            eq(files.folderId, id),
-            eq(files.userId, userData.user.id),
-            eq(files.isFavourite, true),
-          ),
+          and(eq(files.userId, userData.user.id), eq(files.isFavourite, true)),
         );
 
       res
