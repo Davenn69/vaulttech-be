@@ -455,9 +455,12 @@ export const downloadFile = async (
         return next(new CustomError(errors.downloadFileFailed, 400));
 
       return res.status(HttpStatusCode.OK).json({
-        downloadUrl: bucketData.signedUrl,
-        name: file.name,
-        size: file.size,
+        message: successMessages.successDownloadFile,
+        data: {
+          downloadUrl: bucketData.signedUrl,
+          name: file.name,
+          size: file.size,
+        },
       });
     });
   } catch (e: any) {
