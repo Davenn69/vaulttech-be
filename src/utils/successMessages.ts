@@ -6,6 +6,7 @@ class SuccessMessages {
   successUpdateFile: string = "successfully updated file";
   successDeleteFile: string = "successfully deleted file";
   successRestoreFile: string = "successfully restore file";
+  successDownloadFile: string = "successfully download file";
   successCreateFolder: string = "successfully created folder";
   successRetrieveFolders: string = "successfully retrieved folders";
   successUpdateFolder: string = "successfully updated folder";
@@ -15,6 +16,8 @@ class SuccessMessages {
   successMoveFile: string = "successfully moved file to a new folder";
   successAddFavourite: string = "successfully added to favourites";
   successRemoveFavourite: string = "successfully removed from favourites";
+
+  successGetRecent: string = "successfully get recent data";
 }
 
 export const successMessages = new SuccessMessages();

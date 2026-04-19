@@ -4,6 +4,8 @@ import errorHandler from "./middlewares/error";
 import authRoutes from "./routes/authRoutes";
 import fileRoute from "./routes/fileRoutes";
 import folderRoute from "./routes/folderRoutes";
+import recentRoutes from "./routes/recentRoutes";
+import searchRoutes from "./routes/searchRoutes";
 import multer from "multer";
 import { protect } from "./middlewares/protected";
 import { notFound } from "./middlewares/notFound";
@@ -20,7 +22,7 @@ app.use(cookieParser());
 //Added Cors policy (Remove when done)
 app.use(
   cors({
-    origin: "http://192.168.126.1:3000",
+    origin: ["http://localhost:3000", "http://192.168.126.1:3000"],
     credentials: true,
   }),
 );
@@ -31,6 +33,8 @@ app.use(logger);
 app.use("/api/v1/auth", authRoutes);
 app.use("/api/v1/file", protect, fileRoute);
 app.use("/api/v1/folder", protect, folderRoute);
+app.use("/api/v1/recent", protect, recentRoutes);
+app.use("/api/v1/search", protect, searchRoutes);
 //
 
 app.use(drizzleError);
