@@ -334,7 +334,7 @@ export const moveFile = async (
   next: NextFunction,
 ) => {
   try {
-    const { oldId, newId } = req.body;
+    const { fileId, newFolderId } = req.body;
 
     const userData = await validateToken(req.headers.authorization);
 
@@ -350,10 +350,8 @@ export const moveFile = async (
 
       const [file] = await tx
         .update(files)
-        .set({ folderId: newId })
-        .where(
-          and(eq(files.folderId, oldId), eq(files.userId, userData.user.id)),
-        )
+        .set({ folderId: newFolderId })
+        .where(and(eq(files.id, fileId), eq(files.userId, userData.user.id)))
         .returning();
 
       if (!file)
