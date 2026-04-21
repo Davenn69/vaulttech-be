@@ -20,6 +20,7 @@ class ErrorMessages {
   tokenMissing: string = "token is not provided";
   invalidUser: string = "invalid user";
   fileMissing: string = "missing file parameter";
+  fileIdMissing: string = "missing file id parameter";
 
   folderIdMissing: string = "missing folder id parameter";
   nameMissing: string = "missing name parameter";

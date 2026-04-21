@@ -1,5 +1,11 @@
 import { inflateRawSync } from "zlib";
 
+type TiptapNode = {
+  type?: string;
+  text?: string;
+  content?: TiptapNode[];
+};
+
 const createCrc32Table = () => {
   const table = new Uint32Array(256);
 
@@ -26,6 +32,15 @@ const crc32 = (buffer: Buffer) => {
   }
 
   return (crc ^ 0xffffffff) >>> 0;
+};
+
+const escapeXml = (value: string) => {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&apos;");
 };
 
 const createZipBuffer = (entries: Array<{ name: string; data: Buffer }>) => {
@@ -96,7 +111,7 @@ const createZipBuffer = (entries: Array<{ name: string; data: Buffer }>) => {
   return Buffer.concat([...localParts, ...centralParts, endOfCentralDirectory]);
 };
 
-export const createBlankWordDocument = () => {
+const createDocumentPackage = (documentXml: Buffer) => {
   const contentTypes = Buffer.from(
     `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n` +
       `<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">` +
@@ -115,7 +130,15 @@ export const createBlankWordDocument = () => {
     "utf8",
   );
 
-  const documentXml = Buffer.from(
+  return createZipBuffer([
+    { name: "[Content_Types].xml", data: contentTypes },
+    { name: "_rels/.rels", data: relationships },
+    { name: "word/document.xml", data: documentXml },
+  ]);
+};
+
+const createDocumentXml = (body: string) => {
+  return Buffer.from(
     `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n` +
       `<w:document xmlns:wpc="http://schemas.microsoft.com/office/word/2010/wordprocessingCanvas" ` +
       `xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" ` +
@@ -133,18 +156,82 @@ export const createBlankWordDocument = () => {
       `xmlns:wne="http://schemas.microsoft.com/office/word/2006/wordml" ` +
       `xmlns:wps="http://schemas.microsoft.com/office/word/2010/wordprocessingShape" ` +
       `mc:Ignorable="w14 wp14">` +
-      `<w:body><w:p/><w:sectPr>` +
+      `<w:body>${body}` +
+      `<w:sectPr>` +
       `<w:pgSz w:w="12240" w:h="15840"/>` +
       `<w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="708" w:footer="708" w:gutter="0"/>` +
       `</w:sectPr></w:body></w:document>`,
     "utf8",
   );
+};
 
-  return createZipBuffer([
-    { name: "[Content_Types].xml", data: contentTypes },
-    { name: "_rels/.rels", data: relationships },
-    { name: "word/document.xml", data: documentXml },
-  ]);
+const createParagraphXml = (paragraph: TiptapNode) => {
+  const nodes = paragraph.content ?? [];
+  const runs = nodes
+    .map((node) => {
+      if (node.type === "hardBreak") {
+        return `<w:r><w:br/></w:r>`;
+      }
+
+      if (typeof node.text === "string") {
+        return `<w:r><w:t xml:space="preserve">${escapeXml(node.text)}</w:t></w:r>`;
+      }
+
+      if (Array.isArray(node.content) && node.content.length > 0) {
+        return node.content
+          .map((child) => {
+            if (child.type === "hardBreak") {
+              return `<w:r><w:br/></w:r>`;
+            }
+
+            if (typeof child.text === "string") {
+              return `<w:r><w:t xml:space="preserve">${escapeXml(child.text)}</w:t></w:r>`;
+            }
+
+            return "";
+          })
+          .join("");
+      }
+
+      return "";
+    })
+    .join("");
+
+  return runs.length > 0 ? `<w:p>${runs}</w:p>` : `<w:p/>`;
+};
+
+const normalizeTiptapDocument = (content: unknown): TiptapNode[] => {
+  if (Array.isArray(content)) {
+    return content.filter((node): node is TiptapNode => {
+      return typeof node === "object" && node !== null && node.type === "paragraph";
+    });
+  }
+
+  if (!content || typeof content !== "object") {
+    return [];
+  }
+
+  const maybeDocument = content as TiptapNode;
+  if (maybeDocument.type === "paragraph") {
+    return [maybeDocument];
+  }
+
+  const paragraphNodes = Array.isArray(maybeDocument.content)
+    ? maybeDocument.content
+    : [];
+
+  return paragraphNodes.filter((node) => node.type === "paragraph");
+};
+
+export const createBlankWordDocument = () => {
+  const documentXml = createDocumentXml(`<w:p/>`);
+  return createDocumentPackage(documentXml);
+};
+
+export const createWordDocumentFromTiptap = (content: unknown) => {
+  const paragraphs = normalizeTiptapDocument(content);
+  const body = paragraphs.map(createParagraphXml).join("") || `<w:p/>`;
+  return createDocumentPackage(createDocumentXml(body));
 };
 
 const decodeXmlEntities = (value: string) => {

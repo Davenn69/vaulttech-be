@@ -4,6 +4,7 @@ class SuccessMessages {
   successUpload: string = "file has been successfully uploaded";
   successCreateWordFile: string = "word file has been successfully created";
   successRetrieveWordFile: string = "successfully retrieved word file";
+  successSaveWordFile: string = "word file has been successfully saved";
   successRetrieveFiles: string = "successfully retrieved files";
   successUpdateFile: string = "successfully updated file";
   successDeleteFile: string = "successfully deleted file";
@@ -20,6 +21,7 @@ class SuccessMessages {
   successRemoveFavourite: string = "successfully removed from favourites";
 
   successGetRecent: string = "successfully get recent data";
+  successGetFileHistory: string = "successfully get file histories";
 }
 
 export const successMessages = new SuccessMessages();
