@@ -2,6 +2,7 @@ class SuccessMessages {
   register: string = "register user successful";
   login: string = "login successful";
   successUpload: string = "file has been successfully uploaded";
+  successCreateWordFile: string = "word file has been successfully created";
   successRetrieveFiles: string = "successfully retrieved files";
   successUpdateFile: string = "successfully updated file";
   successDeleteFile: string = "successfully deleted file";
