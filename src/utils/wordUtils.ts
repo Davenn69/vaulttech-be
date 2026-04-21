@@ -1,3 +1,5 @@
+import { inflateRawSync } from "zlib";
+
 const createCrc32Table = () => {
   const table = new Uint32Array(256);
 
@@ -143,4 +145,92 @@ export const createBlankWordDocument = () => {
     { name: "_rels/.rels", data: relationships },
     { name: "word/document.xml", data: documentXml },
   ]);
+};
+
+const decodeXmlEntities = (value: string) => {
+  return value
+    .replaceAll("&lt;", "<")
+    .replaceAll("&gt;", ">")
+    .replaceAll("&quot;", '"')
+    .replaceAll("&apos;", "'")
+    .replaceAll("&amp;", "&");
+};
+
+export const extractWordDocumentXml = (buffer: Buffer) => {
+  let offset = 0;
+
+  while (offset + 30 <= buffer.length) {
+    const signature = buffer.readUInt32LE(offset);
+
+    if (signature !== 0x04034b50) break;
+
+    const compressionMethod = buffer.readUInt16LE(offset + 8);
+    const compressedSize = buffer.readUInt32LE(offset + 18);
+    const nameLength = buffer.readUInt16LE(offset + 26);
+    const extraLength = buffer.readUInt16LE(offset + 28);
+    const nameStart = offset + 30;
+    const dataStart = nameStart + nameLength + extraLength;
+    const dataEnd = dataStart + compressedSize;
+    const fileName = buffer.toString("utf8", nameStart, nameStart + nameLength);
+    const fileData = buffer.subarray(dataStart, dataEnd);
+
+    if (fileName === "word/document.xml") {
+      if (compressionMethod === 0) {
+        return fileData.toString("utf8");
+      }
+
+      if (compressionMethod === 8) {
+        return inflateRawSync(fileData).toString("utf8");
+      }
+
+      throw new Error(`Unsupported zip compression method: ${compressionMethod}`);
+    }
+
+    offset = dataEnd;
+  }
+
+  throw new Error("word/document.xml not found in docx buffer");
+};
+
+const extractParagraphContent = (paragraphXml: string) => {
+  const nodes: Array<Record<string, unknown>> = [];
+  const tokens = paragraphXml.match(/<w:t[^>]*>[\s\S]*?<\/w:t>|<w:br\s*\/?>/g) ?? [];
+
+  for (const token of tokens) {
+    if (token.startsWith("<w:br")) {
+      nodes.push({ type: "hardBreak" });
+      continue;
+    }
+
+    const text = token
+      .replace(/^<w:t[^>]*>/, "")
+      .replace(/<\/w:t>$/, "");
+
+    const decoded = decodeXmlEntities(text);
+    if (decoded.length > 0) {
+      nodes.push({ type: "text", text: decoded });
+    }
+  }
+
+  return nodes;
+};
+
+export const convertWordDocumentXmlToTiptap = (xml: string) => {
+  const paragraphs = xml.match(/<w:p[\s\S]*?<\/w:p>/g) ?? [];
+
+  return {
+    type: "doc",
+    content: paragraphs.map((paragraphXml) => {
+      const content = extractParagraphContent(paragraphXml);
+
+      if (content.length === 0) {
+        return { type: "paragraph" };
+      }
+
+      return {
+        type: "paragraph",
+        content,
+      };
+    }),
+  };
 };
