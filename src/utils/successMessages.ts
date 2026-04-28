@@ -3,7 +3,9 @@ class SuccessMessages {
   login: string = "login successful";
   successUpload: string = "file has been successfully uploaded";
   successCreateWordFile: string = "word file has been successfully created";
+  successCreateExcelFile: string = "excel file has been successfully created";
   successRetrieveWordFile: string = "successfully retrieved word file";
+  successRetrieveExcelFile: string = "successfully retrieved excel file";
   successSaveWordFile: string = "word file has been successfully saved";
   successRetrieveFiles: string = "successfully retrieved files";
   successUpdateFile: string = "successfully updated file";

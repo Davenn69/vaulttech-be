@@ -7,6 +7,7 @@ import folderRoute from "./routes/folderRoutes";
 import recentRoutes from "./routes/recentRoutes";
 import searchRoutes from "./routes/searchRoutes";
 import wordRoutes from "./routes/wordRoutes";
+import excelRoutes from "./routes/excelRoutes";
 import multer from "multer";
 import { protect } from "./middlewares/protected";
 import { notFound } from "./middlewares/notFound";
@@ -37,6 +38,7 @@ app.use("/api/v1/folder", protect, folderRoute);
 app.use("/api/v1/recent", protect, recentRoutes);
 app.use("/api/v1/search", protect, searchRoutes);
 app.use("/api/v1/word", protect, wordRoutes);
+app.use("/api/v1/excel", protect, excelRoutes);
 //
 
 app.use(drizzleError);
