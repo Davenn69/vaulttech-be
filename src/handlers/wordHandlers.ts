@@ -17,7 +17,7 @@ import {
   convertWordDocumentXmlToTiptap,
   createBlankWordDocument,
   createWordDocumentFromTiptap,
-  extractWordDocumentXml,
+  extractWordDocumentParts,
 } from "../utils/wordUtils";
 
 const buildFileHash = (buffer: Buffer) => {
@@ -78,6 +78,9 @@ export const createWordFile = async (
           upsert: false,
         });
 
+      console.log(filePath);
+      console.log(bucketError);
+
       if (bucketError)
         throw new CustomError(bucketError.message, HttpStatusCode.BAD_REQUEST);
 
@@ -120,10 +123,7 @@ export const createWordFile = async (
 
         return res.status(HttpStatusCode.CREATED).json({
           message: successMessages.successCreateWordFile,
-          data: {
-            file: fileData,
-            revision: revisionData,
-          },
+          data: fileData,
         });
       } catch (error) {
         try {
@@ -192,8 +192,11 @@ export const getWordFile = async (
         );
 
       const buffer = Buffer.from(await bucketFile.arrayBuffer());
-      const documentXml = extractWordDocumentXml(buffer);
-      const tiptapContent = convertWordDocumentXmlToTiptap(documentXml);
+      const { documentXml, numberingXml } = extractWordDocumentParts(buffer);
+      const tiptapContent = convertWordDocumentXmlToTiptap(
+        documentXml,
+        numberingXml,
+      );
 
       return res.status(HttpStatusCode.OK).json({
         message: successMessages.successRetrieveWordFile,
