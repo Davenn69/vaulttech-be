@@ -9,6 +9,7 @@ import { db } from "..";
 import { profiles } from "../models/profiles";
 import { eq, and, ilike, count, SQL, desc, asc } from "drizzle-orm";
 import { files } from "../models/files";
+import { categories } from "../models/categories";
 import { DrizzleErrorCode } from "../types/drizzleError";
 import { folders } from "../models/folders";
 import { HttpStatusCode } from "../types/httpStatusCode";
@@ -220,6 +221,115 @@ export const updateName = async (
       res
         .status(HttpStatusCode.OK)
         .json({ message: successMessages.successUpdateFile, data: file });
+    });
+  } catch (e: any) {
+    if (e.constructor.name === "DrizzleQueryError") {
+      return next(new DrizzleErrorCode(e.cause.code));
+    } else {
+      return next(e);
+    }
+  }
+};
+
+export const addFileToCertainCategory = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    const { id, categoryId } = req.body;
+
+    if (!id)
+      throw new CustomError(errors.idMissing, HttpStatusCode.BAD_REQUEST);
+    if (!categoryId)
+      throw new CustomError(
+        errors.categoryIdMissing,
+        HttpStatusCode.BAD_REQUEST,
+      );
+
+    const userData = await validateToken(req.headers.authorization);
+
+    await db.transaction(async (tx) => {
+      const [profile] = await tx
+        .select()
+        .from(profiles)
+        .where(eq(profiles.id, userData.user.id))
+        .limit(1);
+
+      if (!profile)
+        throw new CustomError(errors.invalidUser, HttpStatusCode.BAD_REQUEST);
+
+      const [category] = await tx
+        .select()
+        .from(categories)
+        .where(eq(categories.id, categoryId))
+        .limit(1);
+
+      if (!category)
+        throw new CustomError(
+          errors.categoryNotFound,
+          HttpStatusCode.NOT_FOUND,
+        );
+
+      const [file] = await tx
+        .update(files)
+        .set({ categoryId })
+        .where(and(eq(files.id, id), eq(files.userId, userData.user.id)))
+        .returning();
+
+      if (!file)
+        throw new CustomError(errors.fileNotFound, HttpStatusCode.NOT_FOUND);
+
+      return res.status(HttpStatusCode.OK).json({
+        message: successMessages.successUpdateFile,
+        data: file,
+      });
+    });
+  } catch (e: any) {
+    if (e.constructor.name === "DrizzleQueryError") {
+      return next(new DrizzleErrorCode(e.cause.code));
+    } else {
+      return next(e);
+    }
+  }
+};
+
+export const removeFileFromCertainCategory = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    const { id } = req.body;
+
+    if (!id)
+      throw new CustomError(errors.idMissing, HttpStatusCode.BAD_REQUEST);
+
+    const userData = await validateToken(req.headers.authorization);
+
+    await db.transaction(async (tx) => {
+      const [profile] = await tx
+        .select()
+        .from(profiles)
+        .where(eq(profiles.id, userData.user.id))
+        .limit(1);
+
+      if (!profile)
+        throw new CustomError(errors.invalidUser, HttpStatusCode.BAD_REQUEST);
+
+      const [file] = await tx
+        .update(files)
+        .set({ categoryId: null })
+        .where(and(eq(files.id, id), eq(files.userId, userData.user.id)))
+        .returning();
+
+      if (!file)
+        throw new CustomError(errors.fileNotFound, HttpStatusCode.NOT_FOUND);
+
+      return res.status(HttpStatusCode.OK).json({
+        message: successMessages.successUpdateFile,
+        data: file,
+      });
     });
   } catch (e: any) {
     if (e.constructor.name === "DrizzleQueryError") {

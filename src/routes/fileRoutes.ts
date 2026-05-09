@@ -11,6 +11,8 @@ import {
   removeFavourite,
   restoreFile,
   moveFile,
+  addFileToCertainCategory,
+  removeFileFromCertainCategory,
 } from "../handlers/fileHandlers";
 import multer from "multer";
 
@@ -55,6 +57,8 @@ route.patch("/addFavourite", addFavourite);
 route.patch("/removeFavourite", removeFavourite);
 route.patch("/restore", restoreFile);
 route.patch("/move", moveFile);
+route.patch("/addCategory", addFileToCertainCategory);
+route.patch("/removeCategory", removeFileFromCertainCategory);
 
 route.delete("/delete/:id", deleteFile);
 

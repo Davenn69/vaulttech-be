@@ -24,11 +24,16 @@ class ErrorMessages {
 
   folderIdMissing: string = "missing folder id parameter";
   nameMissing: string = "missing name parameter";
+  colorMissing: string = "missing color parameter";
+  categoryIdMissing: string = "missing category id parameter";
 
   fileNotFound: string = "file not found";
   folderNotFound: string = "folder not found";
+  categoryNotFound: string = "category not found";
+  categoryHasFiles: string = "category is still used by files";
 
   folderNotCreated: string = "folder not created";
+  categoryNotCreated: string = "category not created";
 
   uploadFileFailed: string = "unable to upload file";
   downloadFileFailed: string = "unable to download file";

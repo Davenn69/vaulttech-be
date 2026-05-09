@@ -17,6 +17,10 @@ class SuccessMessages {
   successUpdateFolder: string = "successfully updated folder";
   successDeleteFolder: string = "successfully deleted folder";
   successRestoreFolder: string = "successfully restore folder";
+  successCreateCategory: string = "successfully created category";
+  successRetrieveCategories: string = "successfully retrieved categories";
+  successUpdateCategory: string = "successfully updated category";
+  successDeleteCategory: string = "successfully deleted category";
 
   successMoveFile: string = "successfully moved file to a new folder";
   successAddFavourite: string = "successfully added to favourites";
