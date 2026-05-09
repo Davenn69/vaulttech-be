@@ -17,7 +17,7 @@ import {
   convertWordDocumentXmlToTiptap,
   createBlankWordDocument,
   createWordDocumentFromTiptap,
-  extractWordDocumentXml,
+  extractWordDocumentParts,
 } from "../utils/wordUtils";
 
 const buildFileHash = (buffer: Buffer) => {
@@ -78,6 +78,9 @@ export const createWordFile = async (
           upsert: false,
         });
 
+      console.log(filePath);
+      console.log(bucketError);
+
       if (bucketError)
         throw new CustomError(bucketError.message, HttpStatusCode.BAD_REQUEST);
 
@@ -120,10 +123,7 @@ export const createWordFile = async (
 
         return res.status(HttpStatusCode.CREATED).json({
           message: successMessages.successCreateWordFile,
-          data: {
-            file: fileData,
-            revision: revisionData,
-          },
+          data: fileData,
         });
       } catch (error) {
         try {
@@ -192,8 +192,11 @@ export const getWordFile = async (
         );
 
       const buffer = Buffer.from(await bucketFile.arrayBuffer());
-      const documentXml = extractWordDocumentXml(buffer);
-      const tiptapContent = convertWordDocumentXmlToTiptap(documentXml);
+      const { documentXml, numberingXml } = extractWordDocumentParts(buffer);
+      const tiptapContent = convertWordDocumentXmlToTiptap(
+        documentXml,
+        numberingXml,
+      );
 
       return res.status(HttpStatusCode.OK).json({
         message: successMessages.successRetrieveWordFile,
@@ -320,59 +323,6 @@ export const save = async (req: Request, res: Response, next: NextFunction) => {
         }
         throw error;
       }
-    });
-  } catch (e) {
-    if ((e as any)?.constructor?.name === "DrizzleQueryError") {
-      next(new DrizzleErrorCode((e as any).cause.code));
-    } else {
-      next(e);
-    }
-  }
-};
-
-export const getRevisions = async (
-  req: Request,
-  res: Response,
-  next: NextFunction,
-) => {
-  try {
-    const { file_id: id } = req.params as { file_id?: string };
-    if (!id)
-      throw new CustomError(errors.fileIdMissing, HttpStatusCode.BAD_REQUEST);
-
-    const userData = await validateToken(req.headers.authorization);
-
-    db.transaction(async (tx) => {
-      const [profile] = await tx
-        .select()
-        .from(profiles)
-        .where(eq(profiles.id, userData.user.id))
-        .limit(1);
-
-      if (!profile)
-        throw new CustomError(errors.invalidUser, HttpStatusCode.BAD_REQUEST);
-
-      const [file] = await tx
-        .select()
-        .from(files)
-        .where(and(eq(files.id, id), eq(files.userId, profile.id)))
-        .limit(1);
-
-      if (!file || file.isDeleted)
-        throw new CustomError(errors.fileNotFound, HttpStatusCode.NOT_FOUND);
-
-      const revisions = await tx
-        .select()
-        .from(fileRevisions)
-        .where(and(eq(fileRevisions.fileId, id)))
-        .orderBy(fileRevisions.createdAt);
-
-      res.status(HttpStatusCode.OK).json({
-        message: successMessages.successGetFileHistory,
-        data: {
-          revisions,
-        },
-      });
     });
   } catch (e) {
     if ((e as any)?.constructor?.name === "DrizzleQueryError") {

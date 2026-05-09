@@ -4,6 +4,34 @@ type TiptapNode = {
   type?: string;
   text?: string;
   content?: TiptapNode[];
+  attrs?: Record<string, unknown>;
+  marks?: Array<{
+    type?: string;
+    attrs?: Record<string, unknown>;
+  }>;
+};
+
+type ListType = "bulletList" | "orderedList";
+
+type RenderContext = {
+  listType?: ListType;
+  listLevel?: number;
+  numId?: number;
+};
+
+type ZipEntryMap = Map<string, Buffer>;
+
+type WordPackageParts = {
+  documentXml: string;
+  numberingXml?: string;
+};
+
+type NumberingLevelDefinition = {
+  format: string;
+};
+
+type NumberingDefinition = {
+  levels: Map<number, NumberingLevelDefinition>;
 };
 
 const createCrc32Table = () => {
@@ -111,13 +139,66 @@ const createZipBuffer = (entries: Array<{ name: string; data: Buffer }>) => {
   return Buffer.concat([...localParts, ...centralParts, endOfCentralDirectory]);
 };
 
-const createDocumentPackage = (documentXml: Buffer) => {
+const createNumberingXml = () => {
+  const createLevelXml = (level: number, format: "bullet" | "decimal") => {
+    const bulletChars = ["\u2022", "o", "\u25AA"];
+    const lvlText =
+      format === "bullet"
+        ? (bulletChars[level % bulletChars.length] ?? bulletChars[0])
+        : `${Array.from({ length: level + 1 }, (_, index) => `%${index + 1}`).join(".")}.`;
+    const safeLvlText = lvlText ?? "";
+    const indent = 720 + level * 360;
+
+    return (
+      `<w:lvl w:ilvl="${level}">` +
+      `<w:start w:val="1"/>` +
+      `<w:numFmt w:val="${format}"/>` +
+      `<w:lvlText w:val="${escapeXml(safeLvlText)}"/>` +
+      `<w:lvlJc w:val="left"/>` +
+      `<w:pPr><w:ind w:left="${indent}" w:hanging="360"/></w:pPr>` +
+      (format === "bullet"
+        ? `<w:rPr><w:rFonts w:ascii="Symbol" w:hAnsi="Symbol" w:hint="default"/></w:rPr>`
+        : "") +
+      `</w:lvl>`
+    );
+  };
+
+  const createAbstractNumbering = (
+    abstractNumId: number,
+    format: "bullet" | "decimal",
+  ) => {
+    return (
+      `<w:abstractNum w:abstractNumId="${abstractNumId}">` +
+      `<w:multiLevelType w:val="hybridMultilevel"/>` +
+      Array.from({ length: 9 }, (_, level) =>
+        createLevelXml(level, format),
+      ).join("") +
+      `</w:abstractNum>`
+    );
+  };
+
+  return Buffer.from(
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n` +
+      `<w:numbering xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">` +
+      `${createAbstractNumbering(0, "bullet")}` +
+      `<w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num>` +
+      `${createAbstractNumbering(1, "decimal")}` +
+      `<w:num w:numId="2"><w:abstractNumId w:val="1"/></w:num>` +
+      `</w:numbering>`,
+    "utf8",
+  );
+};
+
+const createDocumentPackage = (documentXml: Buffer, numberingXml?: Buffer) => {
   const contentTypes = Buffer.from(
     `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n` +
       `<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">` +
       `<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>` +
       `<Default Extension="xml" ContentType="application/xml"/>` +
       `<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>` +
+      (numberingXml
+        ? `<Override PartName="/word/numbering.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml"/>`
+        : "") +
       `</Types>`,
     "utf8",
   );
@@ -130,11 +211,34 @@ const createDocumentPackage = (documentXml: Buffer) => {
     "utf8",
   );
 
-  return createZipBuffer([
+  const documentRelationships = numberingXml
+    ? Buffer.from(
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n` +
+          `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+          `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering" Target="numbering.xml"/>` +
+          `</Relationships>`,
+        "utf8",
+      )
+    : undefined;
+
+  const entries = [
     { name: "[Content_Types].xml", data: contentTypes },
     { name: "_rels/.rels", data: relationships },
     { name: "word/document.xml", data: documentXml },
-  ]);
+  ];
+
+  if (documentRelationships) {
+    entries.push({
+      name: "word/_rels/document.xml.rels",
+      data: documentRelationships,
+    });
+  }
+
+  if (numberingXml) {
+    entries.push({ name: "word/numbering.xml", data: numberingXml });
+  }
+
+  return createZipBuffer(entries);
 };
 
 const createDocumentXml = (body: string) => {
@@ -165,45 +269,10 @@ const createDocumentXml = (body: string) => {
   );
 };
 
-const createParagraphXml = (paragraph: TiptapNode) => {
-  const nodes = paragraph.content ?? [];
-  const runs = nodes
-    .map((node) => {
-      if (node.type === "hardBreak") {
-        return `<w:r><w:br/></w:r>`;
-      }
-
-      if (typeof node.text === "string") {
-        return `<w:r><w:t xml:space="preserve">${escapeXml(node.text)}</w:t></w:r>`;
-      }
-
-      if (Array.isArray(node.content) && node.content.length > 0) {
-        return node.content
-          .map((child) => {
-            if (child.type === "hardBreak") {
-              return `<w:r><w:br/></w:r>`;
-            }
-
-            if (typeof child.text === "string") {
-              return `<w:r><w:t xml:space="preserve">${escapeXml(child.text)}</w:t></w:r>`;
-            }
-
-            return "";
-          })
-          .join("");
-      }
-
-      return "";
-    })
-    .join("");
-
-  return runs.length > 0 ? `<w:p>${runs}</w:p>` : `<w:p/>`;
-};
-
 const normalizeTiptapDocument = (content: unknown): TiptapNode[] => {
   if (Array.isArray(content)) {
     return content.filter((node): node is TiptapNode => {
-      return typeof node === "object" && node !== null && node.type === "paragraph";
+      return typeof node === "object" && node !== null;
     });
   }
 
@@ -212,26 +281,30 @@ const normalizeTiptapDocument = (content: unknown): TiptapNode[] => {
   }
 
   const maybeDocument = content as TiptapNode;
-  if (maybeDocument.type === "paragraph") {
+  if (maybeDocument.type === "doc" && Array.isArray(maybeDocument.content)) {
+    return maybeDocument.content.filter((node): node is TiptapNode => {
+      return typeof node === "object" && node !== null;
+    });
+  }
+
+  if (Array.isArray(maybeDocument.content)) {
     return [maybeDocument];
   }
 
-  const paragraphNodes = Array.isArray(maybeDocument.content)
-    ? maybeDocument.content
-    : [];
-
-  return paragraphNodes.filter((node) => node.type === "paragraph");
+  return [];
 };
 
 export const createBlankWordDocument = () => {
   const documentXml = createDocumentXml(`<w:p/>`);
-  return createDocumentPackage(documentXml);
+  const numberingXml = createNumberingXml();
+  return createDocumentPackage(documentXml, numberingXml);
 };
 
 export const createWordDocumentFromTiptap = (content: unknown) => {
-  const paragraphs = normalizeTiptapDocument(content);
-  const body = paragraphs.map(createParagraphXml).join("") || `<w:p/>`;
-  return createDocumentPackage(createDocumentXml(body));
+  const blocks = normalizeTiptapDocument(content);
+  const numberingXml = createNumberingXml();
+  const body = renderBlocks(blocks).join("") || `<w:p/>`;
+  return createDocumentPackage(createDocumentXml(body), numberingXml);
 };
 
 const decodeXmlEntities = (value: string) => {
@@ -243,7 +316,8 @@ const decodeXmlEntities = (value: string) => {
     .replaceAll("&amp;", "&");
 };
 
-export const extractWordDocumentXml = (buffer: Buffer) => {
+const extractZipEntries = (buffer: Buffer) => {
+  const entries: ZipEntryMap = new Map();
   let offset = 0;
 
   while (offset + 30 <= buffer.length) {
@@ -260,28 +334,66 @@ export const extractWordDocumentXml = (buffer: Buffer) => {
     const dataEnd = dataStart + compressedSize;
     const fileName = buffer.toString("utf8", nameStart, nameStart + nameLength);
     const fileData = buffer.subarray(dataStart, dataEnd);
+    let data: Buffer;
 
-    if (fileName === "word/document.xml") {
-      if (compressionMethod === 0) {
-        return fileData.toString("utf8");
-      }
-
-      if (compressionMethod === 8) {
-        return inflateRawSync(fileData).toString("utf8");
-      }
-
-      throw new Error(`Unsupported zip compression method: ${compressionMethod}`);
+    if (compressionMethod === 0) {
+      data = Buffer.from(fileData);
+    } else if (compressionMethod === 8) {
+      data = inflateRawSync(fileData);
+    } else {
+      throw new Error(
+        `Unsupported zip compression method: ${compressionMethod}`,
+      );
     }
 
+    entries.set(fileName, data);
     offset = dataEnd;
   }
 
-  throw new Error("word/document.xml not found in docx buffer");
+  return entries;
+};
+
+const readXmlEntry = (entries: ZipEntryMap, name: string) => {
+  const entry = entries.get(name);
+  return entry ? entry.toString("utf8") : undefined;
+};
+
+export const extractWordDocumentXml = (buffer: Buffer) => {
+  const entries = extractZipEntries(buffer);
+  const documentXml = readXmlEntry(entries, "word/document.xml");
+
+  if (!documentXml) {
+    throw new Error("word/document.xml not found in docx buffer");
+  }
+
+  return documentXml;
+};
+
+export const extractWordDocumentParts = (buffer: Buffer): WordPackageParts => {
+  const entries = extractZipEntries(buffer);
+  const documentXml = readXmlEntry(entries, "word/document.xml");
+  const numberingXml = readXmlEntry(entries, "word/numbering.xml");
+
+  if (!documentXml) {
+    throw new Error("word/document.xml not found in docx buffer");
+  }
+
+  return numberingXml
+    ? {
+        documentXml,
+        numberingXml,
+      }
+    : {
+        documentXml,
+      };
 };
 
 const extractParagraphContent = (paragraphXml: string) => {
   const nodes: Array<Record<string, unknown>> = [];
-  const tokens = paragraphXml.match(/<w:t[^>]*>[\s\S]*?<\/w:t>|<w:br\s*\/?>/g) ?? [];
+  const tokens =
+    paragraphXml.match(
+      /<w:t[^>]*>[\s\S]*?<\/w:t>|<w:br\s*\/?>|<w:tab\s*\/?>/g,
+    ) ?? [];
 
   for (const token of tokens) {
     if (token.startsWith("<w:br")) {
@@ -289,9 +401,12 @@ const extractParagraphContent = (paragraphXml: string) => {
       continue;
     }
 
-    const text = token
-      .replace(/^<w:t[^>]*>/, "")
-      .replace(/<\/w:t>$/, "");
+    if (token.startsWith("<w:tab")) {
+      nodes.push({ type: "text", text: "\t" });
+      continue;
+    }
+
+    const text = token.replace(/^<w:t[^>]*>/, "").replace(/<\/w:t>$/, "");
 
     const decoded = decodeXmlEntities(text);
     if (decoded.length > 0) {
@@ -302,22 +417,515 @@ const extractParagraphContent = (paragraphXml: string) => {
   return nodes;
 };
 
-export const convertWordDocumentXmlToTiptap = (xml: string) => {
+const parseNumberingDefinitions = (xml?: string) => {
+  const definitions = new Map<number, NumberingDefinition>();
+  const numIdToAbstractNumId = new Map<number, number>();
+
+  if (!xml) {
+    return { definitions, numIdToAbstractNumId };
+  }
+
+  const abstractNumMatches = xml.matchAll(
+    /<w:abstractNum[^>]*w:abstractNumId="(\d+)"[\s\S]*?<\/w:abstractNum>/g,
+  );
+
+  for (const match of abstractNumMatches) {
+    const abstractNumId = Number(match[1]);
+    const block = match[0];
+    const levels = new Map<number, NumberingLevelDefinition>();
+
+    for (const levelMatch of block.matchAll(
+      /<w:lvl[^>]*w:ilvl="(\d+)"[\s\S]*?<w:numFmt[^>]*w:val="([^"]+)"/g,
+    )) {
+      const format = levelMatch[2] ?? "bullet";
+      levels.set(Number(levelMatch[1]), {
+        format,
+      });
+    }
+
+    definitions.set(abstractNumId, { levels });
+  }
+
+  for (const numMatch of xml.matchAll(
+    /<w:num[^>]*w:numId="(\d+)"[\s\S]*?<w:abstractNumId[^>]*w:val="(\d+)"/g,
+  )) {
+    numIdToAbstractNumId.set(Number(numMatch[1]), Number(numMatch[2]));
+  }
+
+  return { definitions, numIdToAbstractNumId };
+};
+
+const resolveListType = (
+  numId: number | undefined,
+  level: number | undefined,
+  numbering: ReturnType<typeof parseNumberingDefinitions>,
+): ListType | undefined => {
+  if (numId === undefined || level === undefined) {
+    return undefined;
+  }
+
+  const abstractNumId = numbering.numIdToAbstractNumId.get(numId);
+  if (abstractNumId === undefined) {
+    return undefined;
+  }
+
+  const definition = numbering.definitions.get(abstractNumId);
+  if (!definition) {
+    return undefined;
+  }
+
+  const levelDefinition = definition.levels.get(level);
+  if (!levelDefinition) {
+    return undefined;
+  }
+
+  return levelDefinition.format === "bullet" ? "bulletList" : "orderedList";
+};
+
+const parseParagraphNode = (
+  paragraphXml: string,
+  numbering: ReturnType<typeof parseNumberingDefinitions>,
+) => {
+  const content = extractParagraphContent(paragraphXml);
+  const styleMatch = paragraphXml.match(/<w:pStyle[^>]*w:val="([^"]+)"/);
+  const numIdMatch = paragraphXml.match(/<w:numId[^>]*w:val="(\d+)"/);
+  const ilvlMatch = paragraphXml.match(/<w:ilvl[^>]*w:val="(\d+)"/);
+  const style = styleMatch?.[1];
+  const numId = numIdMatch ? Number(numIdMatch[1]) : undefined;
+  const level = ilvlMatch ? Number(ilvlMatch[1]) : undefined;
+  const listType = resolveListType(numId, level, numbering);
+  const isHorizontalRule = /<w:pBdr>[\s\S]*?<w:bottom\b/.test(paragraphXml);
+  const indentMatch = paragraphXml.match(/<w:ind[^>]*w:left="(\d+)"/);
+
+  if (listType) {
+    return {
+      block: {
+        type: "paragraph",
+        content: content.length > 0 ? content : undefined,
+      } as TiptapNode,
+      listType,
+      level: level ?? 0,
+    };
+  }
+
+  if (isHorizontalRule) {
+    return {
+      block: {
+        type: "horizontalRule",
+      } as TiptapNode,
+    };
+  }
+
+  if (indentMatch && Number(indentMatch[1]) >= 720) {
+    return {
+      block: {
+        type: "blockquote",
+        content: content.length > 0 ? content : undefined,
+      } as TiptapNode,
+    };
+  }
+
+  if (style && /^Heading[1-6]$/.test(style)) {
+    return {
+      block: {
+        type: "heading",
+        attrs: {
+          level: Number(style.replace("Heading", "")),
+        },
+        content: content.length > 0 ? content : undefined,
+      } as TiptapNode,
+    };
+  }
+
+  if (paragraphXml.includes("<w:tbl")) {
+    return {
+      block: {
+        type: "paragraph",
+        content: content.length > 0 ? content : undefined,
+      } as TiptapNode,
+    };
+  }
+
+  return {
+    block: {
+      type: "paragraph",
+      content: content.length > 0 ? content : undefined,
+    } as TiptapNode,
+  };
+};
+
+const renderTextNode = (node: TiptapNode) => {
+  if (node.type === "hardBreak") {
+    return `<w:r><w:br/></w:r>`;
+  }
+
+  if (typeof node.text !== "string") {
+    return "";
+  }
+
+  const marks = node.marks ?? [];
+  const runProperties: string[] = [];
+
+  for (const mark of marks) {
+    if (mark.type === "bold") {
+      runProperties.push("<w:b/>");
+    }
+
+    if (mark.type === "italic") {
+      runProperties.push("<w:i/>");
+    }
+
+    if (mark.type === "underline") {
+      runProperties.push('<w:u w:val="single"/>');
+    }
+
+    if (mark.type === "strike") {
+      runProperties.push("<w:strike/>");
+    }
+
+    if (mark.type === "code") {
+      runProperties.push(
+        '<w:rFonts w:ascii="Courier New" w:hAnsi="Courier New"/><w:sz w:val="20"/>',
+      );
+    }
+  }
+
+  const properties =
+    runProperties.length > 0 ? `<w:rPr>${runProperties.join("")}</w:rPr>` : "";
+  return `<w:r>${properties}<w:t xml:space="preserve">${escapeXml(node.text)}</w:t></w:r>`;
+};
+
+const renderInlineNodes = (nodes: TiptapNode[] = []): string => {
+  return nodes
+    .map((node) => {
+      if (
+        Array.isArray(node.content) &&
+        node.content.length > 0 &&
+        !node.text
+      ) {
+        return renderInlineNodes(node.content);
+      }
+
+      return renderTextNode(node);
+    })
+    .join("");
+};
+
+const createParagraphXml = (
+  paragraph: TiptapNode,
+  context: RenderContext = {},
+) => {
+  const nodes = paragraph.content ?? [];
+  const runs = renderInlineNodes(nodes);
+  const paragraphProperties: string[] = [];
+
+  if (paragraph.type === "heading") {
+    const level = Number(paragraph.attrs?.level ?? 1);
+    paragraphProperties.push(
+      `<w:pStyle w:val="Heading${Math.min(Math.max(level, 1), 6)}"/>`,
+    );
+  }
+
+  if (paragraph.type === "blockquote") {
+    paragraphProperties.push('<w:ind w:left="720" w:right="360"/>');
+  }
+
+  if (paragraph.type === "codeBlock") {
+    paragraphProperties.push(
+      '<w:rPr><w:rFonts w:ascii="Courier New" w:hAnsi="Courier New"/><w:sz w:val="20"/></w:rPr>',
+    );
+  }
+
+  if (paragraph.type === "horizontalRule") {
+    return `<w:p><w:pPr><w:pBdr><w:bottom w:val="single" w:sz="6" w:space="1" w:color="auto"/></w:pBdr></w:pPr></w:p>`;
+  }
+
+  if (context.listType && context.numId !== undefined) {
+    paragraphProperties.push(
+      `<w:numPr><w:ilvl w:val="${context.listLevel ?? 0}"/><w:numId w:val="${context.numId}"/></w:numPr>`,
+    );
+  }
+
+  const properties =
+    paragraphProperties.length > 0
+      ? `<w:pPr>${paragraphProperties.join("")}</w:pPr>`
+      : "";
+  return runs.length > 0
+    ? `<w:p>${properties}${runs}</w:p>`
+    : `<w:p>${properties}</w:p>`;
+};
+
+const renderBlockXml = (
+  node: TiptapNode,
+  context: RenderContext = {},
+): string => {
+  if (node.type === "doc") {
+    return renderBlocks(node.content ?? [], context).join("");
+  }
+
+  if (node.type === "bulletList" || node.type === "orderedList") {
+    const nextContext: RenderContext = {
+      listType: node.type,
+      listLevel: context.listLevel ?? 0,
+      numId: node.type === "bulletList" ? 1 : 2,
+    };
+
+    return (node.content ?? [])
+      .map((child) => {
+        if (child.type !== "listItem") {
+          return renderBlockXml(child, context);
+        }
+
+        return renderListItemXml(child, nextContext);
+      })
+      .join("");
+  }
+
+  if (node.type === "listItem") {
+    return renderListItemXml(node, context);
+  }
+
+  if (node.type === "blockquote") {
+    const content = Array.isArray(node.content) ? node.content : [];
+    return content.map((child) => renderBlockXml(child, context)).join("");
+  }
+
+  if (
+    node.type === "paragraph" ||
+    node.type === "heading" ||
+    node.type === "codeBlock" ||
+    node.type === "horizontalRule"
+  ) {
+    return createParagraphXml(node, context);
+  }
+
+  if (Array.isArray(node.content) && node.content.length > 0) {
+    return renderBlocks(node.content, context).join("");
+  }
+
+  if (typeof node.text === "string") {
+    return createParagraphXml({ type: "paragraph", content: [node] }, context);
+  }
+
+  return `<w:p/>`;
+};
+
+const renderListItemXml = (node: TiptapNode, context: RenderContext) => {
+  const children = node.content ?? [];
+  const blocks: string[] = [];
+  let firstParagraphRendered = false;
+
+  for (const child of children) {
+    if (child.type === "bulletList" || child.type === "orderedList") {
+      blocks.push(
+        renderBlockXml(child, {
+          listType: child.type,
+          listLevel: (context.listLevel ?? 0) + 1,
+          numId: child.type === "bulletList" ? 1 : 2,
+        }),
+      );
+      continue;
+    }
+
+    if (!firstParagraphRendered) {
+      blocks.push(
+        createParagraphXml(
+          child.type ? child : { type: "paragraph", content: [child] },
+          context,
+        ),
+      );
+      firstParagraphRendered = true;
+      continue;
+    }
+
+    blocks.push(renderBlockXml(child, context));
+  }
+
+  if (!firstParagraphRendered) {
+    blocks.unshift(createParagraphXml({ type: "paragraph" }, context));
+  }
+
+  return blocks.join("");
+};
+
+const renderBlocks = (
+  nodes: TiptapNode[] = [],
+  context: RenderContext = {},
+) => {
+  const blocks: string[] = [];
+
+  for (let index = 0; index < nodes.length; index++) {
+    const node = nodes[index];
+    if (!node) {
+      continue;
+    }
+
+    if (node.type === "bulletList" || node.type === "orderedList") {
+      const currentListType = node.type;
+      const currentLevel = context.listLevel ?? 0;
+      const currentNumId = currentListType === "bulletList" ? 1 : 2;
+
+      blocks.push(
+        renderBlockXml(node, {
+          listType: currentListType,
+          listLevel: currentLevel,
+          numId: currentNumId,
+        }),
+      );
+      continue;
+    }
+
+    blocks.push(renderBlockXml(node, context));
+  }
+
+  return blocks;
+};
+
+const groupListItems = (
+  items: Array<{
+    block: TiptapNode;
+    listType: ListType;
+    level: number;
+  }>,
+  startIndex: number,
+  level: number,
+  listType: ListType,
+): [TiptapNode | null, number] => {
+  const listItems: TiptapNode[] = [];
+  let index = startIndex;
+
+  while (index < items.length) {
+    const item = items[index];
+    if (!item) {
+      break;
+    }
+
+    if (item.level < level || item.listType !== listType) {
+      break;
+    }
+
+    if (item.level > level) {
+      const previousItem = listItems[listItems.length - 1];
+      if (!previousItem) {
+        index++;
+        continue;
+      }
+
+      const [nestedList, nextIndex] = groupListItems(
+        items,
+        index,
+        item.level,
+        item.listType,
+      );
+
+      if (nestedList) {
+        previousItem.content ??= [];
+        previousItem.content.push(nestedList);
+      }
+
+      index = nextIndex;
+      continue;
+    }
+
+    listItems.push({
+      type: "listItem",
+      content: [item.block],
+    });
+    index++;
+
+    while (index < items.length) {
+      const nestedItem = items[index];
+      if (!nestedItem) {
+        break;
+      }
+      if (nestedItem.level <= level) {
+        break;
+      }
+      if (!nestedItem.listType) {
+        break;
+      }
+      const [nestedList, nextIndex] = groupListItems(
+        items,
+        index,
+        nestedItem.level,
+        nestedItem.listType,
+      );
+
+      if (nestedList) {
+        const previousItem = listItems[listItems.length - 1];
+        if (previousItem) {
+          previousItem.content ??= [];
+          previousItem.content.push(nestedList);
+        }
+      }
+
+      index = nextIndex;
+    }
+  }
+
+  if (listItems.length === 0) {
+    return [null, startIndex];
+  }
+
+  return [
+    {
+      type: listType,
+      content: listItems,
+    },
+    index,
+  ];
+};
+
+export const convertWordDocumentXmlToTiptap = (
+  xml: string,
+  numberingXml?: string,
+) => {
   const paragraphs = xml.match(/<w:p[\s\S]*?<\/w:p>/g) ?? [];
+  const numbering = parseNumberingDefinitions(numberingXml);
+  const flatBlocks: Array<{
+    block: TiptapNode;
+    listType?: ListType;
+    level?: number;
+  }> = [];
+
+  for (const paragraphXml of paragraphs) {
+    const parsed = parseParagraphNode(paragraphXml, numbering);
+    flatBlocks.push(parsed);
+  }
+
+  const docContent: TiptapNode[] = [];
+
+  for (let index = 0; index < flatBlocks.length; index++) {
+    const item = flatBlocks[index];
+    if (!item) {
+      continue;
+    }
+
+    if (item.listType && item.level !== undefined) {
+      const [listNode, nextIndex] = groupListItems(
+        flatBlocks as Array<{
+          block: TiptapNode;
+          listType: ListType;
+          level: number;
+        }>,
+        index,
+        item.level,
+        item.listType,
+      );
+
+      if (listNode) {
+        docContent.push(listNode);
+      }
+
+      index = nextIndex - 1;
+      continue;
+    }
+
+    docContent.push(item.block);
+  }
 
   return {
     type: "doc",
-    content: paragraphs.map((paragraphXml) => {
-      const content = extractParagraphContent(paragraphXml);
-
-      if (content.length === 0) {
-        return { type: "paragraph" };
-      }
-
-      return {
-        type: "paragraph",
-        content,
-      };
-    }),
+    content: docContent,
   };
 };
