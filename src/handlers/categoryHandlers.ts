@@ -193,7 +193,10 @@ export const deleteCategory = async (
         .where(eq(files.categoryId, id));
 
       if (fileCount[0]!.total > 0)
-        throw new CustomError(errors.categoryHasFiles, HttpStatusCode.BAD_REQUEST);
+        throw new CustomError(
+          errors.categoryHasFiles,
+          HttpStatusCode.BAD_REQUEST,
+        );
 
       const [category] = await tx
         .delete(categories)
@@ -255,11 +258,6 @@ export const getFilesByCategory = async (
         },
         {},
       );
-
-      const uncategorized = fileData.filter((file) => !file.categoryId);
-      if (uncategorized.length > 0) {
-        groupedData["uncategorized"] = uncategorized;
-      }
 
       return res.status(HttpStatusCode.OK).json({
         message: successMessages.successRetrieveCategories,

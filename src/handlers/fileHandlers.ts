@@ -148,16 +148,34 @@ export const getFiles = async (
       const countQuery = await tx
         .select({ total: count() })
         .from(files)
+        .innerJoin(categories, eq(files.categoryId, categories.id))
         .where(and(...fileQueryConditions));
       const totalItems = countQuery[0]!.total;
 
       const file = await tx
-        .select()
+        .select({
+          file: files,
+          category: {
+            id: categories.id,
+            name: categories.name,
+            color: categories.color,
+            approvalRequired: categories.approvalRequired,
+            approvalRole: categories.approvalRole,
+            createdAt: categories.createdAt,
+            updatedAt: categories.updatedAt,
+          },
+        })
         .from(files)
+        .fullJoin(categories, eq(files.categoryId, categories.id))
         .limit(limitNum)
         .offset(offset)
         .orderBy(sort_order === "desc" ? desc(files.name) : asc(files.name))
         .where(and(...fileQueryConditions));
+
+      const filesWithCategory = file.map(({ file, category }) => ({
+        ...file,
+        category,
+      }));
 
       const totalPages = Math.ceil(totalItems / limitNum);
       const hasNextPage = pageNum < totalPages;
@@ -172,7 +190,7 @@ export const getFiles = async (
           has_next_page: hasNextPage,
           has_prev_page: hasPrevPage,
         },
-        data: file,
+        data: filesWithCategory,
       });
     });
   } catch (e: any) {
