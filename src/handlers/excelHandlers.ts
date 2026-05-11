@@ -14,11 +14,8 @@ import { fileRevisions } from "../models/file_revisions";
 import { DrizzleErrorCode } from "../types/drizzleError";
 import { createHash } from "crypto";
 import {
-  convertExcelWorksheetXmlToGrid,
+  convertExcelBufferToSheet,
   createBlankExcelDocument,
-  extractExcelSheetName,
-  extractExcelWorkbookXml,
-  extractExcelWorksheetXml,
 } from "../utils/excelUtils";
 
 const buildFileHash = (buffer: Buffer) => {
@@ -183,10 +180,7 @@ export const getExcelFile = async (
         );
 
       const buffer = Buffer.from(await bucketFile.arrayBuffer());
-      const workbookXml = extractExcelWorkbookXml(buffer);
-      const worksheetXml = extractExcelWorksheetXml(buffer);
-      const sheetName = extractExcelSheetName(workbookXml);
-      const content = convertExcelWorksheetXmlToGrid(worksheetXml);
+      const { sheetName, content } = convertExcelBufferToSheet(buffer);
 
       return res.status(HttpStatusCode.OK).json({
         message: successMessages.successRetrieveExcelFile,

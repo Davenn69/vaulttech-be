@@ -5,6 +5,19 @@ type ExcelCell = {
   type?: string;
   value?: string;
   inlineText?: string;
+  formula?: string;
+  styleId?: number;
+  fontId?: number;
+  bold?: boolean;
+  italic?: boolean;
+};
+
+type ExcelStyle = {
+  styleId: number;
+  fontId: number;
+  numFmtId: number;
+  bold: boolean;
+  italic: boolean;
 };
 
 const createCrc32Table = () => {
@@ -169,11 +182,43 @@ export const createBlankExcelDocument = () => {
 
 const decodeXmlEntities = (value: string) => {
   return value
+    .replaceAll("&apos;", "'")
     .replaceAll("&lt;", "<")
     .replaceAll("&gt;", ">")
     .replaceAll("&quot;", '"')
-    .replaceAll("&apos;", "'")
     .replaceAll("&amp;", "&");
+};
+
+const parseXmlAttributes = (xml: string) => {
+  const attributes: Record<string, string> = {};
+
+  for (const match of xml.matchAll(/([\w:-]+)="([^"]*)"/g)) {
+    const [, key, rawValue] = match;
+    if (!key) continue;
+    attributes[key] = decodeXmlEntities(rawValue ?? "");
+  }
+
+  return attributes;
+};
+
+const extractSingleXmlTag = (xml: string, tagName: string) => {
+  const match = xml.match(new RegExp(`<${tagName}\\b[^>]*\\/?>`, "i"));
+  return match?.[0];
+};
+
+const resolveWorkbookTargetPath = (target: string) => {
+  const normalizedTarget = target.replace(/^\/+/, "");
+
+  if (normalizedTarget.startsWith("xl/")) {
+    return normalizedTarget;
+  }
+
+  const withoutParentTraversal = normalizedTarget.replace(/^(\.\.\/)+/, "");
+  if (withoutParentTraversal.startsWith("xl/")) {
+    return withoutParentTraversal;
+  }
+
+  return `xl/${withoutParentTraversal}`;
 };
 
 const extractZipEntry = (buffer: Buffer, fileName: string) => {
@@ -220,6 +265,148 @@ export const extractExcelWorkbookXml = (buffer: Buffer) => {
   return extractZipEntry(buffer, "xl/workbook.xml").toString("utf8");
 };
 
+export const extractExcelWorkbookRelationshipsXml = (buffer: Buffer) => {
+  return extractZipEntry(buffer, "xl/_rels/workbook.xml.rels").toString("utf8");
+};
+
+export const extractExcelSharedStringsXml = (buffer: Buffer) => {
+  return extractZipEntry(buffer, "xl/sharedStrings.xml").toString("utf8");
+};
+
+export const extractExcelStylesXml = (buffer: Buffer) => {
+  return extractZipEntry(buffer, "xl/styles.xml").toString("utf8");
+};
+
+const extractExcelSheetInfo = (
+  workbookXml: string,
+  workbookRelsXml: string,
+) => {
+  const sheetTag = extractSingleXmlTag(workbookXml, "sheet");
+
+  if (!sheetTag) {
+    return {
+      name: "Sheet1",
+      path: "xl/worksheets/sheet1.xml",
+    };
+  }
+
+  const sheetAttributes = parseXmlAttributes(sheetTag);
+  const relationshipId = sheetAttributes["r:id"] ?? sheetAttributes.id;
+  const sheetName = sheetAttributes.name ?? "Sheet1";
+
+  if (!relationshipId) {
+    return {
+      name: sheetName,
+      path: "xl/worksheets/sheet1.xml",
+    };
+  }
+
+  const relationshipTag = workbookRelsXml
+    .match(/<Relationship\b[^>]*Type="[^"]*\/worksheet"[^>]*\/?>/i)
+    ?.[0];
+
+  if (!relationshipTag) {
+    return {
+      name: sheetName,
+      path: "xl/worksheets/sheet1.xml",
+    };
+  }
+
+  const relationshipAttributes = parseXmlAttributes(relationshipTag);
+
+  if (relationshipAttributes.Id !== relationshipId) {
+    const relationshipById = workbookRelsXml.match(
+      new RegExp(
+        `<Relationship\\b[^>]*Id="${relationshipId}"[^>]*Type="[^"]*\\/worksheet"[^>]*\\/?>`,
+        "i",
+      ),
+    )?.[0];
+
+    if (relationshipById) {
+      const relationshipByIdAttributes = parseXmlAttributes(relationshipById);
+      return {
+        name: sheetName,
+        path: resolveWorkbookTargetPath(
+          relationshipByIdAttributes.Target ?? "worksheets/sheet1.xml",
+        ),
+      };
+    }
+  }
+
+  return {
+    name: sheetName,
+    path: resolveWorkbookTargetPath(
+      relationshipAttributes.Target ?? "worksheets/sheet1.xml",
+    ),
+  };
+};
+
+const parseSharedStrings = (sharedStringsXml: string) => {
+  const sharedStringItems = sharedStringsXml.match(/<si\b[\s\S]*?<\/si>/g) ?? [];
+
+  return sharedStringItems.map((sharedStringXml) => {
+    const textParts = sharedStringXml.match(/<t[^>]*>([\s\S]*?)<\/t>/g) ?? [];
+
+    if (textParts.length === 0) {
+      return "";
+    }
+
+    return textParts
+      .map((textPart) => {
+        const textValue = textPart.match(/<t[^>]*>([\s\S]*?)<\/t>/)?.[1] ?? "";
+        return decodeXmlEntities(textValue);
+      })
+      .join("");
+  });
+};
+
+const parseStyles = (stylesXml: string) => {
+  const fontXmlBlocks = stylesXml.match(/<fonts\b[^>]*>([\s\S]*?)<\/fonts>/i)?.[1] ?? "";
+  const cellXfXmlBlocks = stylesXml.match(/<cellXfs\b[^>]*>([\s\S]*?)<\/cellXfs>/i)?.[1] ?? "";
+
+  const fonts = (fontXmlBlocks.match(/<font\b[\s\S]*?<\/font>/g) ?? []).map((fontXml) => ({
+    bold: /<b\b[^>]*\/?>/i.test(fontXml),
+    italic: /<i\b[^>]*\/?>/i.test(fontXml),
+  }));
+
+  const cellXfs = (cellXfXmlBlocks.match(/<xf\b[^>]*\/?>/g) ?? []).map((xfXml) => {
+    const attributes = parseXmlAttributes(xfXml);
+    return {
+      fontId: Number(attributes.fontId ?? 0),
+      numFmtId: Number(attributes.numFmtId ?? 0),
+    };
+  });
+
+  return { fonts, cellXfs };
+};
+
+const getCellStyle = (styleId: number | undefined, styles: ReturnType<typeof parseStyles>) => {
+  if (styleId === undefined || Number.isNaN(styleId)) {
+    return undefined;
+  }
+
+  const xf = styles.cellXfs[styleId];
+  if (!xf) {
+    return {
+      styleId,
+      fontId: 0,
+      numFmtId: 0,
+      bold: false,
+      italic: false,
+    };
+  }
+
+  const font = styles.fonts[xf.fontId] ?? { bold: false, italic: false };
+
+  return {
+    styleId,
+    fontId: xf.fontId,
+    numFmtId: xf.numFmtId,
+    bold: font.bold,
+    italic: font.italic,
+  };
+};
+
 const getColumnIndex = (reference: string) => {
   const columnLetters = reference.replace(/\d+/g, "");
   let index = 0;
@@ -232,13 +419,16 @@ const getColumnIndex = (reference: string) => {
 };
 
 const parseCell = (cellXml: string) => {
-  const reference = cellXml.match(/r="([^"]+)"/)?.[1];
-  const type = cellXml.match(/t="([^"]+)"/)?.[1];
+  const attributes = parseXmlAttributes(cellXml);
+  const reference = attributes.r;
+  const type = attributes.t;
+  const styleId = attributes.s !== undefined ? Number(attributes.s) : undefined;
 
   const inlineTextMatch = cellXml.match(
     /<is>[\s\S]*?<t[^>]*>([\s\S]*?)<\/t>[\s\S]*?<\/is>/,
   );
   const valueMatch = cellXml.match(/<v>([\s\S]*?)<\/v>/);
+  const formulaMatch = cellXml.match(/<f[^>]*>([\s\S]*?)<\/f>/);
 
   const cell: ExcelCell = {};
 
@@ -250,6 +440,10 @@ const parseCell = (cellXml: string) => {
     cell.type = type;
   }
 
+  if (styleId !== undefined && !Number.isNaN(styleId)) {
+    cell.styleId = styleId;
+  }
+
   if (inlineTextMatch?.[1] !== undefined) {
     cell.inlineText = decodeXmlEntities(inlineTextMatch[1]);
   }
@@ -258,38 +452,64 @@ const parseCell = (cellXml: string) => {
     cell.value = decodeXmlEntities(valueMatch[1]);
   }
 
+  if (formulaMatch?.[1] !== undefined) {
+    cell.formula = decodeXmlEntities(formulaMatch[1]);
+  }
+
   return cell;
 };
 
-const parseWorksheetRows = (worksheetXml: string) => {
+const parseWorksheetRows = (
+  worksheetXml: string,
+  sharedStrings: string[],
+  styles: ReturnType<typeof parseStyles>,
+) => {
   const rows = worksheetXml.match(/<row[^>]*>[\s\S]*?<\/row>/g) ?? [];
 
   return rows.map((rowXml) => {
     const cells = rowXml.match(/<c[\s\S]*?<\/c>/g) ?? [];
-    const row: Array<string | number | boolean | null> = [];
+    const row: Array<Record<string, unknown> | null> = [];
 
     for (const cellXml of cells) {
       const cell = parseCell(cellXml);
       if (!cell.reference) continue;
 
       const index = getColumnIndex(cell.reference);
-      const rawValue =
-        cell.inlineText ??
-        cell.value ??
-        "";
+      const rawValue = cell.inlineText ?? cell.value ?? "";
+      const style = getCellStyle(cell.styleId, styles);
 
-      const parsedValue =
-        cell.type === "b"
-          ? rawValue === "1"
-          : rawValue.length > 0 && !Number.isNaN(Number(rawValue))
-            ? Number(rawValue)
-            : rawValue;
+      let parsedValue: string | number | boolean | null = null;
+
+      if (cell.type === "s") {
+        const sharedStringIndex = Number(rawValue);
+        parsedValue = Number.isNaN(sharedStringIndex)
+          ? rawValue
+          : sharedStrings[sharedStringIndex] ?? rawValue;
+      } else if (cell.type === "b") {
+        parsedValue = rawValue === "1";
+      } else if (cell.type === "inlineStr") {
+        parsedValue = rawValue;
+      } else if (rawValue.length > 0 && !Number.isNaN(Number(rawValue))) {
+        parsedValue = Number(rawValue);
+      } else {
+        parsedValue = rawValue.length > 0 ? rawValue : null;
+      }
 
       while (row.length < index) {
         row.push(null);
       }
 
-      row[index] = parsedValue;
+      row[index] = {
+        reference: cell.reference,
+        value: parsedValue,
+        formula: cell.formula ?? null,
+        type: cell.type ?? null,
+        styleId: cell.styleId ?? null,
+        bold: style?.bold ?? false,
+        italic: style?.italic ?? false,
+        fontId: style?.fontId ?? null,
+        numFmtId: style?.numFmtId ?? null,
+      };
     }
 
     return row;
@@ -302,6 +522,42 @@ export const extractExcelSheetName = (workbookXml: string) => {
 };
 
 export const convertExcelWorksheetXmlToGrid = (worksheetXml: string) => {
-  const rows = parseWorksheetRows(worksheetXml);
+  const rows = parseWorksheetRows(worksheetXml, [], {
+    fonts: [],
+    cellXfs: [],
+  });
   return rows.length > 0 ? rows : [[]];
+};
+
+export const convertExcelBufferToSheet = (buffer: Buffer) => {
+  const workbookXml = extractExcelWorkbookXml(buffer);
+  const workbookRelationshipsXml = extractExcelWorkbookRelationshipsXml(buffer);
+  const sheetInfo = extractExcelSheetInfo(workbookXml, workbookRelationshipsXml);
+
+  let worksheetXml = extractZipEntry(buffer, sheetInfo.path).toString("utf8");
+  let sharedStrings: string[] = [];
+  let styles = { fonts: [], cellXfs: [] } as ReturnType<typeof parseStyles>;
+
+  try {
+    sharedStrings = parseSharedStrings(extractExcelSharedStringsXml(buffer));
+  } catch {
+    sharedStrings = [];
+  }
+
+  try {
+    styles = parseStyles(extractExcelStylesXml(buffer));
+  } catch {
+    styles = { fonts: [], cellXfs: [] };
+  }
+
+  const content = parseWorksheetRows(worksheetXml, sharedStrings, styles);
+
+  if (content.length === 0) {
+    worksheetXml = worksheetXml.replace(/<sheetData\b[^>]*>([\s\S]*?)<\/sheetData>/i, "<sheetData></sheetData>");
+  }
+
+  return {
+    sheetName: sheetInfo.name,
+    content: content.length > 0 ? content : [[]],
+  };
 };
