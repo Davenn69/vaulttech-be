@@ -13,6 +13,7 @@ import {
   moveFile,
   addFileToCertainCategory,
   removeFileFromCertainCategory,
+  getFileUrl,
 } from "../handlers/fileHandlers";
 import multer from "multer";
 
@@ -24,13 +25,16 @@ const upload = multer({
     fileSize: 10 * 1024 * 1024,
   },
   fileFilter: (req, file, cb) => {
-    // Accept only Word, Excel, and PDF files
+    // Accept only Word, Excel, PowerPoint, PDF, and image files
     const allowedMimes = [
       "application/pdf",
       "application/msword",
       "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
       "application/vnd.ms-excel",
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+      "image/jpeg",
+      "image/png",
     ];
 
     if (allowedMimes.includes(file.mimetype)) {
@@ -38,7 +42,7 @@ const upload = multer({
     } else {
       cb(
         new Error(
-          "Invalid file type. Only Word, Excel, and PDF files are allowed.",
+          "Invalid file type. Only Word, Excel, PowerPoint, PDF, and JPG/PNG/JPEG files are allowed.",
         ),
       );
     }
@@ -51,6 +55,7 @@ route.get("/deleted", getDeletedFiles);
 route.get("/favourite", selectFavourites);
 route.get("/download/:id", downloadFile);
 route.get("/:id", getFiles);
+route.get("/:id/signedUrl", getFileUrl);
 
 route.patch("/updateName", updateName);
 route.patch("/addFavourite", addFavourite);

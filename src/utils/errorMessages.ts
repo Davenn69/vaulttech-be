@@ -37,6 +37,7 @@ class ErrorMessages {
 
   uploadFileFailed: string = "unable to upload file";
   downloadFileFailed: string = "unable to download file";
+  unableToLoadFile: string = "unable to load photo";
 }
 
 export const errors = new ErrorMessages();

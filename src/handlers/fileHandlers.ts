@@ -7,7 +7,7 @@ import { successMessages } from "../utils/successMessages";
 import { v4 as uuidv4 } from "uuid";
 import { db } from "..";
 import { profiles } from "../models/profiles";
-import { eq, and, ilike, count, SQL, desc, asc } from "drizzle-orm";
+import { eq, and, ilike, count, SQL, desc, asc, inArray } from "drizzle-orm";
 import { files } from "../models/files";
 import { categories } from "../models/categories";
 import { DrizzleErrorCode } from "../types/drizzleError";
@@ -15,6 +15,24 @@ import { folders } from "../models/folders";
 import { HttpStatusCode } from "../types/httpStatusCode";
 import { PaginationParams } from "../types/pagination";
 import { validateToken } from "../middlewares/protected";
+
+const IMAGE_EXTENSIONS = new Set(["jpg", "jpeg", "png"]);
+
+const getImagePreviewUrl = async (filePath: string, extension?: string) => {
+  if (!extension || !IMAGE_EXTENSIONS.has(extension.toLowerCase())) {
+    return null;
+  }
+
+  const { data, error } = await supabase.storage
+    .from("Documents")
+    .createSignedUrl(filePath, 3600);
+
+  if (error) {
+    return null;
+  }
+
+  return data.signedUrl;
+};
 
 export const uploadFile = async (
   req: Request,
@@ -723,6 +741,74 @@ export const removeFavourite = async (
       res
         .status(HttpStatusCode.OK)
         .json({ message: successMessages.successRemoveFavourite, data: file });
+    });
+  } catch (e: any) {
+    if (e.constructor.name === "DrizzleQueryError") {
+      next(new DrizzleErrorCode(e.cause.code));
+    } else {
+      next(e);
+    }
+  }
+};
+
+export const getFileUrl = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    const { id } = req.params;
+
+    if (!id)
+      throw new CustomError(errors.idMissing, HttpStatusCode.BAD_REQUEST);
+
+    const userData = await validateToken(req.headers.authorization);
+
+    await db.transaction(async (tx) => {
+      const [profile] = await tx
+        .select()
+        .from(profiles)
+        .where(and(eq(profiles.id, userData.user.id)));
+
+      if (!profile)
+        throw new CustomError(errors.invalidUser, HttpStatusCode.BAD_REQUEST);
+
+      console.log(`id ${id}`);
+
+      const [file] = await tx
+        .update(files)
+        .set({ isFavourite: false })
+        .where(
+          and(
+            eq(files.userId, userData.user.id),
+            eq(files.id, id),
+            inArray(files.extension, ["jpg", "png", "jpeg"]),
+          ),
+        )
+        .returning();
+      if (!file)
+        throw new CustomError(errors.fileNotFound, HttpStatusCode.NOT_FOUND);
+
+      const { data, error } = await supabase.storage
+        .from("Documents")
+        .createSignedUrl(file.path, 3600);
+
+      console.log(`file path ${file.path}`);
+
+      if (error) {
+        throw new CustomError(
+          errors.unableToLoadFile,
+          HttpStatusCode.INTERNAL_SERVER_ERROR,
+        );
+      }
+
+      res.status(HttpStatusCode.OK).json({
+        message: successMessages.successGetPhoto,
+        data: {
+          file,
+          signedUrl: data.signedUrl,
+        },
+      });
     });
   } catch (e: any) {
     if (e.constructor.name === "DrizzleQueryError") {

@@ -10,7 +10,6 @@ import searchRoutes from "./routes/searchRoutes";
 import wordRoutes from "./routes/wordRoutes";
 import excelRoutes from "./routes/excelRoutes";
 import revisionRoutes from "./routes/revisionRoutes";
-import multer from "multer";
 import { protect } from "./middlewares/protected";
 import { notFound } from "./middlewares/notFound";
 import { drizzleError } from "./middlewares/postgresError";

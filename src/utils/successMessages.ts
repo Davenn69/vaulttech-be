@@ -7,6 +7,7 @@ class SuccessMessages {
   successRetrieveWordFile: string = "successfully retrieved word file";
   successRetrieveExcelFile: string = "successfully retrieved excel file";
   successSaveWordFile: string = "word file has been successfully saved";
+  successSaveExcelFile: string = "excel file has been successfully saved";
   successRetrieveFiles: string = "successfully retrieved files";
   successUpdateFile: string = "successfully updated file";
   successDeleteFile: string = "successfully deleted file";
@@ -28,6 +29,7 @@ class SuccessMessages {
 
   successGetRecent: string = "successfully get recent data";
   successGetFileHistory: string = "successfully get file histories";
+  successGetPhoto: string = "successfully load photo";
 }
 
 export const successMessages = new SuccessMessages();
