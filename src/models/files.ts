@@ -8,6 +8,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { authUsers } from "./auth";
 import { folders } from "./folders";
+import { categories } from "./categories";
 
 export const files = pgTable("files", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -21,6 +22,7 @@ export const files = pgTable("files", {
   folderId: uuid("folder_id")
     .references(() => folders.id)
     .notNull(),
+  categoryId: uuid("category_id").references(() => categories.id),
   name: varchar("name").notNull(),
   createdBy: varchar("created_by").notNull(),
   updatedBy: varchar("updated_by"),

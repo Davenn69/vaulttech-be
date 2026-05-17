@@ -7,6 +7,7 @@ class SuccessMessages {
   successRetrieveWordFile: string = "successfully retrieved word file";
   successRetrieveExcelFile: string = "successfully retrieved excel file";
   successSaveWordFile: string = "word file has been successfully saved";
+  successSaveExcelFile: string = "excel file has been successfully saved";
   successRetrieveFiles: string = "successfully retrieved files";
   successUpdateFile: string = "successfully updated file";
   successDeleteFile: string = "successfully deleted file";
@@ -17,6 +18,10 @@ class SuccessMessages {
   successUpdateFolder: string = "successfully updated folder";
   successDeleteFolder: string = "successfully deleted folder";
   successRestoreFolder: string = "successfully restore folder";
+  successCreateCategory: string = "successfully created category";
+  successRetrieveCategories: string = "successfully retrieved categories";
+  successUpdateCategory: string = "successfully updated category";
+  successDeleteCategory: string = "successfully deleted category";
 
   successMoveFile: string = "successfully moved file to a new folder";
   successAddFavourite: string = "successfully added to favourites";
@@ -24,6 +29,7 @@ class SuccessMessages {
 
   successGetRecent: string = "successfully get recent data";
   successGetFileHistory: string = "successfully get file histories";
+  successGetPhoto: string = "successfully load photo";
 }
 
 export const successMessages = new SuccessMessages();
