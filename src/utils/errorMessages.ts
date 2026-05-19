@@ -29,6 +29,7 @@ class ErrorMessages {
   categoryIdMissing: string = "missing category id parameter";
 
   fileNotFound: string = "file not found";
+  fileNotAccessible: string = "file not accessible";
   folderNotFound: string = "folder not found";
   categoryNotFound: string = "category not found";
   invitationAlreadyExists: string = "invitation already exists";

@@ -25,6 +25,9 @@ class SuccessMessages {
   successRetrieveInvitations: string = "successfully retrieved invitations";
   successRetrieveInviteableUsers: string =
     "successfully retrieved inviteable users";
+  successRetrieveReviewFiles: string = "successfully retrieved reviewable files";
+  successRetrieveReviewFileContent: string =
+    "successfully retrieved reviewable file content";
 
   successMoveFile: string = "successfully moved file to a new folder";
   successAddFavourite: string = "successfully added to favourites";
