@@ -23,6 +23,7 @@ class ErrorMessages {
   fileIdMissing: string = "missing file id parameter";
 
   folderIdMissing: string = "missing folder id parameter";
+  supervisorIdMissing: string = "missing supervisor id parameter";
   nameMissing: string = "missing name parameter";
   colorMissing: string = "missing color parameter";
   categoryIdMissing: string = "missing category id parameter";
@@ -30,10 +31,18 @@ class ErrorMessages {
   fileNotFound: string = "file not found";
   folderNotFound: string = "folder not found";
   categoryNotFound: string = "category not found";
+  invitationAlreadyExists: string = "invitation already exists";
+  invitationNotFound: string = "invitation not found";
+  invitationAlreadyProcessed: string = "invitation already processed";
+  invitationNotAllowed: string = "you are not allowed to accept this invitation";
+  invitationNotAllowedToDecline: string =
+    "you are not allowed to decline this invitation";
   categoryHasFiles: string = "category is still used by files";
 
   folderNotCreated: string = "folder not created";
   categoryNotCreated: string = "category not created";
+  invitationNotCreated: string = "invitation not created";
+  invitationNotUpdated: string = "invitation not updated";
 
   uploadFileFailed: string = "unable to upload file";
   downloadFileFailed: string = "unable to download file";

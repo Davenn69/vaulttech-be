@@ -22,6 +22,9 @@ class SuccessMessages {
   successRetrieveCategories: string = "successfully retrieved categories";
   successUpdateCategory: string = "successfully updated category";
   successDeleteCategory: string = "successfully deleted category";
+  successRetrieveInvitations: string = "successfully retrieved invitations";
+  successRetrieveInviteableUsers: string =
+    "successfully retrieved inviteable users";
 
   successMoveFile: string = "successfully moved file to a new folder";
   successAddFavourite: string = "successfully added to favourites";
@@ -30,6 +33,9 @@ class SuccessMessages {
   successGetRecent: string = "successfully get recent data";
   successGetFileHistory: string = "successfully get file histories";
   successGetPhoto: string = "successfully load photo";
+  successCreateInvitation: string = "invitation has been successfully created";
+  successAcceptInvitation: string = "invitation has been successfully accepted";
+  successDeclineInvitation: string = "invitation has been successfully declined";
 }
 
 export const successMessages = new SuccessMessages();
