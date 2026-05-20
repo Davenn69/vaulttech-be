@@ -15,6 +15,8 @@ import { folders } from "../models/folders";
 import { HttpStatusCode } from "../types/httpStatusCode";
 import { PaginationParams } from "../types/pagination";
 import { validateToken } from "../middlewares/protected";
+import { createClient } from "@supabase/supabase-js";
+import { documentSupervisors } from "../models/document_supervisors";
 
 const IMAGE_EXTENSIONS = new Set(["jpg", "jpeg", "png"]);
 
@@ -751,7 +753,7 @@ export const removeFavourite = async (
   }
 };
 
-export const getFileUrl = async (
+export const getPhotoUrl = async (
   req: Request,
   res: Response,
   next: NextFunction,
@@ -792,6 +794,64 @@ export const getFileUrl = async (
       const { data, error } = await supabase.storage
         .from("Documents")
         .createSignedUrl(file.path, 3600);
+
+      console.log(`file path ${file.path}`);
+
+      if (error) {
+        throw new CustomError(
+          errors.unableToLoadPhoto,
+          HttpStatusCode.INTERNAL_SERVER_ERROR,
+        );
+      }
+
+      res.status(HttpStatusCode.OK).json({
+        message: successMessages.successGetPhoto,
+        data: {
+          file,
+          signedUrl: data.signedUrl,
+        },
+      });
+    });
+  } catch (e: any) {
+    if (e.constructor.name === "DrizzleQueryError") {
+      next(new DrizzleErrorCode(e.cause.code));
+    } else {
+      next(e);
+    }
+  }
+};
+
+export const getFileUrl = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    const { id } = req.params;
+
+    if (!id)
+      throw new CustomError(errors.idMissing, HttpStatusCode.BAD_REQUEST);
+
+    const userData = await validateToken(req.headers.authorization);
+
+    await db.transaction(async (tx) => {
+      const [profile] = await tx
+        .select()
+        .from(profiles)
+        .where(and(eq(profiles.id, userData.user.id)));
+
+      if (!profile)
+        throw new CustomError(errors.invalidUser, HttpStatusCode.BAD_REQUEST);
+
+      const [file] = await tx.select().from(files).where(eq(files.id, id));
+      if (!file)
+        throw new CustomError(errors.fileNotFound, HttpStatusCode.NOT_FOUND);
+
+      const { data, error } = await supabase.storage
+        .from("Documents")
+        .createSignedUrl(file.path, 3600);
+
+      console.log(error);
 
       console.log(`file path ${file.path}`);
 

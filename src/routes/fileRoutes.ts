@@ -14,6 +14,7 @@ import {
   addFileToCertainCategory,
   removeFileFromCertainCategory,
   getFileUrl,
+  getPhotoUrl,
 } from "../handlers/fileHandlers";
 import multer from "multer";
 
@@ -56,6 +57,7 @@ route.get("/favourite", selectFavourites);
 route.get("/download/:id", downloadFile);
 route.get("/:id", getFiles);
 route.get("/:id/signedUrl", getFileUrl);
+route.get("/:id/photo", getPhotoUrl);
 
 route.patch("/updateName", updateName);
 route.patch("/addFavourite", addFavourite);

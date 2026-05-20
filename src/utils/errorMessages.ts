@@ -35,7 +35,8 @@ class ErrorMessages {
   invitationAlreadyExists: string = "invitation already exists";
   invitationNotFound: string = "invitation not found";
   invitationAlreadyProcessed: string = "invitation already processed";
-  invitationNotAllowed: string = "you are not allowed to accept this invitation";
+  invitationNotAllowed: string =
+    "you are not allowed to accept this invitation";
   invitationNotAllowedToDecline: string =
     "you are not allowed to decline this invitation";
   categoryHasFiles: string = "category is still used by files";
@@ -47,7 +48,8 @@ class ErrorMessages {
 
   uploadFileFailed: string = "unable to upload file";
   downloadFileFailed: string = "unable to download file";
-  unableToLoadFile: string = "unable to load photo";
+  unableToLoadFile: string = "unable to load file";
+  unableToLoadPhoto: string = "unable to load photo";
 }
 
 export const errors = new ErrorMessages();
