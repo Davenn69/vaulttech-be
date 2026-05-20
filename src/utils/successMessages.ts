@@ -28,6 +28,8 @@ class SuccessMessages {
   successRetrieveReviewFiles: string = "successfully retrieved reviewable files";
   successRetrieveReviewFileContent: string =
     "successfully retrieved reviewable file content";
+  successApproveReview: string = "document has been successfully approved";
+  successDeclineReview: string = "document has been successfully declined";
 
   successMoveFile: string = "successfully moved file to a new folder";
   successAddFavourite: string = "successfully added to favourites";

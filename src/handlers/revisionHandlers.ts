@@ -36,7 +36,7 @@ export const getRevisions = async (
       const [file] = await tx
         .select()
         .from(files)
-        .where(and(eq(files.id, id), eq(files.userId, profile.id)))
+        .where(and(eq(files.id, id)))
         .limit(1);
 
       if (!file || file.isDeleted)

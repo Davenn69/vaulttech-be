@@ -851,10 +851,6 @@ export const getFileUrl = async (
         .from("Documents")
         .createSignedUrl(file.path, 3600);
 
-      console.log(error);
-
-      console.log(`file path ${file.path}`);
-
       if (error) {
         throw new CustomError(
           errors.unableToLoadFile,
@@ -862,11 +858,13 @@ export const getFileUrl = async (
         );
       }
 
+      const officeViewerUrl = `https://view.officeapps.live.com/op/view.aspx?src=${encodeURIComponent(data.signedUrl)}`;
+
       res.status(HttpStatusCode.OK).json({
         message: successMessages.successGetPhoto,
         data: {
           file,
-          signedUrl: data.signedUrl,
+          url: officeViewerUrl,
         },
       });
     });

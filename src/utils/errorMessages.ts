@@ -32,6 +32,7 @@ class ErrorMessages {
   fileNotAccessible: string = "file not accessible";
   folderNotFound: string = "folder not found";
   categoryNotFound: string = "category not found";
+  reviewNotFound: string = "review not found";
   invitationAlreadyExists: string = "invitation already exists";
   invitationNotFound: string = "invitation not found";
   invitationAlreadyProcessed: string = "invitation already processed";
@@ -39,6 +40,9 @@ class ErrorMessages {
     "you are not allowed to accept this invitation";
   invitationNotAllowedToDecline: string =
     "you are not allowed to decline this invitation";
+  reviewNotAllowed: string = "you are not allowed to review this document";
+  reviewAlreadyProcessed: string = "review already processed";
+  reviewNotUpdated: string = "review not updated";
   categoryHasFiles: string = "category is still used by files";
 
   folderNotCreated: string = "folder not created";

@@ -123,15 +123,10 @@ export const acceptInvitation = async (
   next: NextFunction,
 ) => {
   try {
-    const { id } = req.body as { id?: string | number };
+    const { id } = req.body as { id?: string };
 
     if (!id)
       throw new CustomError(errors.idMissing, HttpStatusCode.BAD_REQUEST);
-
-    const invitationId = Number(id);
-    if (!Number.isFinite(invitationId)) {
-      throw new CustomError(errors.idMissing, HttpStatusCode.BAD_REQUEST);
-    }
 
     const userData = await validateToken(req.headers.authorization);
 
@@ -148,7 +143,7 @@ export const acceptInvitation = async (
       const [currentInvitation] = await tx
         .select()
         .from(documentSupervisors)
-        .where(eq(documentSupervisors.id, invitationId))
+        .where(eq(documentSupervisors.id, id))
         .limit(1);
 
       if (!currentInvitation)
@@ -173,7 +168,7 @@ export const acceptInvitation = async (
         })
         .where(
           and(
-            eq(documentSupervisors.id, invitationId),
+            eq(documentSupervisors.id, id),
             eq(documentSupervisors.supervisorId, profile.id),
           ),
         )
@@ -204,15 +199,10 @@ export const declineInvitation = async (
   next: NextFunction,
 ) => {
   try {
-    const { id } = req.body as { id?: string | number };
+    const { id } = req.body as { id?: string };
 
     if (!id)
       throw new CustomError(errors.idMissing, HttpStatusCode.BAD_REQUEST);
-
-    const invitationId = Number(id);
-    if (!Number.isFinite(invitationId)) {
-      throw new CustomError(errors.idMissing, HttpStatusCode.BAD_REQUEST);
-    }
 
     const userData = await validateToken(req.headers.authorization);
 
@@ -229,7 +219,7 @@ export const declineInvitation = async (
       const [currentInvitation] = await tx
         .select()
         .from(documentSupervisors)
-        .where(eq(documentSupervisors.id, invitationId))
+        .where(eq(documentSupervisors.id, id))
         .limit(1);
 
       if (!currentInvitation)
@@ -257,7 +247,7 @@ export const declineInvitation = async (
         })
         .where(
           and(
-            eq(documentSupervisors.id, invitationId),
+            eq(documentSupervisors.id, id),
             eq(documentSupervisors.supervisorId, profile.id),
           ),
         )

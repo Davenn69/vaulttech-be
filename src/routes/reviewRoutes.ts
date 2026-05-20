@@ -1,12 +1,14 @@
 import { Router } from "express";
 import {
-  getReviewableFileContent,
+  approveDocument,
+  declineDocument,
   getReviewableFiles,
 } from "../handlers/reviewHandlers";
 
 const router = Router();
 
 router.get("/files", getReviewableFiles);
-router.get("/files/:id", getReviewableFileContent);
+router.patch("/approve", approveDocument);
+router.patch("/decline", declineDocument);
 
 export default router;
