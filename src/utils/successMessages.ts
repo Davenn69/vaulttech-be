@@ -22,6 +22,7 @@ class SuccessMessages {
   successRetrieveCategories: string = "successfully retrieved categories";
   successUpdateCategory: string = "successfully updated category";
   successDeleteCategory: string = "successfully deleted category";
+  successCreatePermission: string = "successfully created permission";
   successRetrieveInvitations: string = "successfully retrieved invitations";
   successRetrieveInviteableUsers: string =
     "successfully retrieved inviteable users";

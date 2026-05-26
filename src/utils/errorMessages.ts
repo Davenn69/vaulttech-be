@@ -27,11 +27,18 @@ class ErrorMessages {
   nameMissing: string = "missing name parameter";
   colorMissing: string = "missing color parameter";
   categoryIdMissing: string = "missing category id parameter";
+  permissionTypeMissing: string = "missing permission type parameter";
+  grantedToMissing: string = "missing granted to parameter";
+  permissionResourceMissing: string = "missing permission resource parameter";
 
   fileNotFound: string = "file not found";
   fileNotAccessible: string = "file not accessible";
   folderNotFound: string = "folder not found";
   categoryNotFound: string = "category not found";
+  permissionNotFound: string = "permission not found";
+  permissionAlreadyExists: string = "permission already exists";
+  permissionNotCreated: string = "permission not created";
+  permissionNotAllowed: string = "you are not allowed to grant this permission";
   reviewNotFound: string = "review not found";
   invitationAlreadyExists: string = "invitation already exists";
   invitationNotFound: string = "invitation not found";

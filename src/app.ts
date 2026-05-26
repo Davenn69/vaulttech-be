@@ -12,6 +12,7 @@ import excelRoutes from "./routes/excelRoutes";
 import revisionRoutes from "./routes/revisionRoutes";
 import invitationRoutes from "./routes/invitationRoutes";
 import reviewRoutes from "./routes/reviewRoutes";
+import permissionRoutes from "./routes/permissionRoutes";
 import { protect } from "./middlewares/protected";
 import { notFound } from "./middlewares/notFound";
 import { drizzleError } from "./middlewares/postgresError";
@@ -46,6 +47,7 @@ app.use("/api/v1/excel", protect, excelRoutes);
 app.use("/api/v1/revision", protect, revisionRoutes);
 app.use("/api/v1/invitation", protect, invitationRoutes);
 app.use("/api/v1/review", protect, reviewRoutes);
+app.use("/api/v1/permission", protect, permissionRoutes);
 //
 
 app.use(drizzleError);
