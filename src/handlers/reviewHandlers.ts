@@ -175,8 +175,6 @@ export const getReviewableFiles = async (
         })
         .from(documentSupervisors)
         .innerJoin(files, eq(documentSupervisors.fileId, files.id))
-        .leftJoin(folders, eq(files.folderId, folders.id))
-        .leftJoin(categories, eq(files.categoryId, categories.id))
         .where(
           and(
             eq(documentSupervisors.supervisorId, profile.id),
@@ -197,9 +195,120 @@ export const getReviewableFiles = async (
         )
         .orderBy(desc(documentSupervisors.respondedAt));
 
+      const reviewedFiles = await tx
+        .select({
+          invitation: documentSupervisors,
+          file: files,
+        })
+        .from(documentSupervisors)
+        .innerJoin(files, eq(documentSupervisors.fileId, files.id))
+        .where(
+          and(
+            eq(documentSupervisors.invitedBy, profile.id),
+            eq(documentSupervisors.status, REVIEW_STATUS.accepted),
+            eq(files.isDeleted, false),
+          ),
+        )
+        .orderBy(desc(documentSupervisors.respondedAt));
+
       return res.status(HttpStatusCode.OK).json({
         message: successMessages.successRetrieveReviewFiles,
-        data: reviewableFiles,
+        data: { reviewableFiles, reviewedFiles },
+      });
+    });
+  } catch (e: any) {
+    if (e.constructor?.name === "DrizzleQueryError") {
+      next(new DrizzleErrorCode(e.cause.code));
+    } else {
+      next(e);
+    }
+  }
+};
+
+export const getReviewCommentsByFile = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    const { id } = req.params;
+
+    if (!id) {
+      throw new CustomError(errors.idMissing, HttpStatusCode.BAD_REQUEST);
+    }
+
+    const userData = await validateToken(req.headers.authorization);
+
+    await db.transaction(async (tx) => {
+      const [profile] = await tx
+        .select()
+        .from(profiles)
+        .where(eq(profiles.id, userData.user.id))
+        .limit(1);
+
+      if (!profile) {
+        throw new CustomError(errors.invalidUser, HttpStatusCode.BAD_REQUEST);
+      }
+
+      const [file] = await tx
+        .select()
+        .from(files)
+        .where(and(eq(files.id, id), eq(files.isDeleted, false)))
+        .limit(1);
+
+      if (!file) {
+        throw new CustomError(errors.fileNotFound, HttpStatusCode.NOT_FOUND);
+      }
+
+      const supervisorMatch = await tx
+        .select({ id: documentSupervisors.id })
+        .from(documentSupervisors)
+        .where(
+          and(
+            eq(documentSupervisors.fileId, id),
+            eq(documentSupervisors.supervisorId, profile.id),
+          ),
+        )
+        .limit(1);
+
+      const isOwner = file.userId === profile.id;
+      const isSupervisor = supervisorMatch.length > 0;
+
+      if (!isOwner && !isSupervisor) {
+        throw new CustomError(
+          errors.fileNotAccessible,
+          HttpStatusCode.FORBIDDEN,
+        );
+      }
+
+      const comments = await tx
+        .select({
+          id: approvalComments.id,
+          createdAt: approvalComments.createdAt,
+          documentSupervisorId: approvalComments.documentSupervisorId,
+          status: approvalComments.status,
+          comment: approvalComments.comment,
+          createdBy: approvalComments.createdBy,
+          creator: {
+            id: profiles.id,
+            username: profiles.username,
+          },
+        })
+        .from(approvalComments)
+        .innerJoin(
+          documentSupervisors,
+          eq(approvalComments.documentSupervisorId, documentSupervisors.id),
+        )
+        .innerJoin(profiles, eq(approvalComments.createdBy, profiles.id))
+        .where(eq(documentSupervisors.fileId, id))
+        .orderBy(desc(approvalComments.createdAt));
+
+      return res.status(HttpStatusCode.OK).json({
+        message: successMessages.successRetrieveReviewComments,
+        data: {
+          file,
+          comments,
+        },
       });
     });
   } catch (e: any) {

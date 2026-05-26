@@ -851,6 +851,10 @@ export const getFileUrl = async (
         .from("Documents")
         .createSignedUrl(file.path, 3600);
 
+      console.log(file.path);
+
+      console.log(error);
+
       if (error) {
         throw new CustomError(
           errors.unableToLoadFile,
