@@ -15,6 +15,7 @@ import {
   removeFileFromCertainCategory,
   getFileUrl,
   getPhotoUrl,
+  getSharedFiles,
 } from "../handlers/fileHandlers";
 import multer from "multer";
 
@@ -52,6 +53,7 @@ const upload = multer({
 
 route.post("/uploadFile", upload.single("file"), uploadFile);
 
+route.get("/shared", getSharedFiles);
 route.get("/deleted", getDeletedFiles);
 route.get("/favourite", selectFavourites);
 route.get("/download/:id", downloadFile);

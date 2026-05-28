@@ -9,12 +9,15 @@ class SuccessMessages {
   successSaveWordFile: string = "word file has been successfully saved";
   successSaveExcelFile: string = "excel file has been successfully saved";
   successRetrieveFiles: string = "successfully retrieved files";
+  successRetrieveSharedFiles: string = "successfully retrieved shared files";
   successUpdateFile: string = "successfully updated file";
   successDeleteFile: string = "successfully deleted file";
   successRestoreFile: string = "successfully restore file";
   successDownloadFile: string = "successfully download file";
   successCreateFolder: string = "successfully created folder";
   successRetrieveFolders: string = "successfully retrieved folders";
+  successRetrieveSharedFolders: string =
+    "successfully retrieved shared folders";
   successUpdateFolder: string = "successfully updated folder";
   successDeleteFolder: string = "successfully deleted folder";
   successRestoreFolder: string = "successfully restore folder";

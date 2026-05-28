@@ -5,11 +5,12 @@ import { supabase } from "../utils/supabase";
 import { successMessages } from "../utils/successMessages";
 import { db } from "..";
 import { profiles } from "../models/profiles";
-import { and, eq, ilike } from "drizzle-orm";
+import { and, desc, eq, ilike } from "drizzle-orm";
 import { folders } from "../models/folders";
 import { DrizzleErrorCode } from "../types/drizzleError";
 import { HttpStatusCode } from "../types/httpStatusCode";
 import { validateToken } from "../middlewares/protected";
+import { folderPermissions } from "../models/folder_permissions";
 
 export const createFolder = async (
   req: Request,
@@ -138,6 +139,94 @@ export const getFolders = async (
       res.status(HttpStatusCode.OK).json({
         message: successMessages.successRetrieveFolders,
         data: folder,
+      });
+    });
+  } catch (e: any) {
+    if (e.constructor.name === "DrizzleQueryError") {
+      next(new DrizzleErrorCode(e.cause.code));
+    } else {
+      next(e);
+    }
+  }
+};
+
+type SharedPermission = {
+  id: number;
+  createdAt: string;
+  isActive: boolean;
+  permissionType: string;
+  grantedBy: string;
+  grantedTo: string;
+};
+
+export const getSharedFolders = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    const userData = await validateToken(req.headers.authorization);
+
+    await db.transaction(async (tx) => {
+      const [profile] = await tx
+        .select()
+        .from(profiles)
+        .where(eq(profiles.id, userData.user.id))
+        .limit(1);
+
+      if (!profile)
+        throw new CustomError(errors.invalidUser, HttpStatusCode.BAD_REQUEST);
+
+      const sharedFolderRows = await tx
+        .select({
+          folder: folders,
+          permission: {
+            id: folderPermissions.id,
+            createdAt: folderPermissions.createdAt,
+            isActive: folderPermissions.isActive,
+            permissionType: folderPermissions.permissionType,
+            grantedBy: folderPermissions.grantedBy,
+            grantedTo: folderPermissions.grantedTo,
+          },
+        })
+        .from(folderPermissions)
+        .innerJoin(folders, eq(folderPermissions.folderId, folders.id))
+        .where(
+          and(
+            eq(folderPermissions.grantedTo, profile.id),
+            eq(folderPermissions.isActive, true),
+            eq(folders.isDeleted, false),
+          ),
+        )
+        .orderBy(desc(folderPermissions.createdAt));
+
+      const sharedFoldersMap = new Map<
+        string,
+        {
+          [key: string]: any;
+          permissions: SharedPermission[];
+        }
+      >();
+
+      for (const row of sharedFolderRows) {
+        if (row.permission.grantedBy === profile.id) continue;
+
+        const existingFolder = sharedFoldersMap.get(row.folder.id);
+
+        if (!existingFolder) {
+          sharedFoldersMap.set(row.folder.id, {
+            ...row.folder,
+            permissions: [row.permission],
+          });
+          continue;
+        }
+
+        existingFolder.permissions.push(row.permission);
+      }
+
+      res.status(HttpStatusCode.OK).json({
+        message: successMessages.successRetrieveSharedFolders,
+        data: Array.from(sharedFoldersMap.values()),
       });
     });
   } catch (e: any) {
