@@ -15,8 +15,19 @@ import { folders } from "../models/folders";
 import { HttpStatusCode } from "../types/httpStatusCode";
 import { PaginationParams } from "../types/pagination";
 import { validateToken } from "../middlewares/protected";
+import { createClient } from "@supabase/supabase-js";
+import { documentSupervisors } from "../models/document_supervisors";
+import { filePermissions } from "../models/file_permissions";
 
 const IMAGE_EXTENSIONS = new Set(["jpg", "jpeg", "png"]);
+type SharedPermission = {
+  id: number;
+  createdAt: string;
+  isActive: boolean;
+  permissionType: string;
+  grantedBy: string;
+  grantedTo: string;
+};
 
 const getImagePreviewUrl = async (filePath: string, extension?: string) => {
   if (!extension || !IMAGE_EXTENSIONS.has(extension.toLowerCase())) {
@@ -209,6 +220,88 @@ export const getFiles = async (
           has_prev_page: hasPrevPage,
         },
         data: filesWithCategory,
+      });
+    });
+  } catch (e: any) {
+    if (e.constructor.name === "DrizzleQueryError") {
+      next(new DrizzleErrorCode(e.cause.code));
+    } else {
+      next(e);
+    }
+  }
+};
+
+export const getSharedFiles = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    const userData = await validateToken(req.headers.authorization);
+
+    await db.transaction(async (tx) => {
+      const [profile] = await tx
+        .select()
+        .from(profiles)
+        .where(eq(profiles.id, userData.user.id))
+        .limit(1);
+
+      if (!profile) {
+        throw new CustomError(errors.invalidUser, HttpStatusCode.BAD_REQUEST);
+      }
+
+      const sharedFileRows = await tx
+        .select({
+          file: files,
+          permission: {
+            id: filePermissions.id,
+            createdAt: filePermissions.createdAt,
+            isActive: filePermissions.isActive,
+            permissionType: filePermissions.permissionType,
+            grantedBy: filePermissions.grantedBy,
+            grantedTo: filePermissions.grantedTo,
+          },
+        })
+        .from(filePermissions)
+        .innerJoin(files, eq(filePermissions.fileId, files.id))
+        .where(
+          and(
+            eq(filePermissions.grantedTo, profile.id),
+            eq(filePermissions.isActive, true),
+            eq(files.isDeleted, false),
+          ),
+        )
+        .orderBy(desc(filePermissions.createdAt));
+
+      const sharedFilesMap = new Map<
+        string,
+        {
+          [key: string]: any;
+          permissions: SharedPermission[];
+        }
+      >();
+
+      for (const row of sharedFileRows) {
+        if (row.permission.grantedBy === profile.id) {
+          continue;
+        }
+
+        const existingFile = sharedFilesMap.get(row.file.id);
+
+        if (!existingFile) {
+          sharedFilesMap.set(row.file.id, {
+            ...row.file,
+            permissions: [row.permission],
+          });
+          continue;
+        }
+
+        existingFile.permissions.push(row.permission);
+      }
+
+      res.status(HttpStatusCode.OK).json({
+        message: successMessages.successRetrieveSharedFiles,
+        data: Array.from(sharedFilesMap.values()),
       });
     });
   } catch (e: any) {
@@ -751,7 +844,7 @@ export const removeFavourite = async (
   }
 };
 
-export const getFileUrl = async (
+export const getPhotoUrl = async (
   req: Request,
   res: Response,
   next: NextFunction,
@@ -797,7 +890,7 @@ export const getFileUrl = async (
 
       if (error) {
         throw new CustomError(
-          errors.unableToLoadFile,
+          errors.unableToLoadPhoto,
           HttpStatusCode.INTERNAL_SERVER_ERROR,
         );
       }
@@ -807,6 +900,66 @@ export const getFileUrl = async (
         data: {
           file,
           signedUrl: data.signedUrl,
+        },
+      });
+    });
+  } catch (e: any) {
+    if (e.constructor.name === "DrizzleQueryError") {
+      next(new DrizzleErrorCode(e.cause.code));
+    } else {
+      next(e);
+    }
+  }
+};
+
+export const getFileUrl = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    const { id } = req.params;
+
+    if (!id)
+      throw new CustomError(errors.idMissing, HttpStatusCode.BAD_REQUEST);
+
+    const userData = await validateToken(req.headers.authorization);
+
+    await db.transaction(async (tx) => {
+      const [profile] = await tx
+        .select()
+        .from(profiles)
+        .where(and(eq(profiles.id, userData.user.id)));
+
+      if (!profile)
+        throw new CustomError(errors.invalidUser, HttpStatusCode.BAD_REQUEST);
+
+      const [file] = await tx.select().from(files).where(eq(files.id, id));
+      if (!file)
+        throw new CustomError(errors.fileNotFound, HttpStatusCode.NOT_FOUND);
+
+      const { data, error } = await supabase.storage
+        .from("Documents")
+        .createSignedUrl(file.path, 3600);
+
+      console.log(file.path);
+
+      console.log(error);
+
+      if (error) {
+        throw new CustomError(
+          errors.unableToLoadFile,
+          HttpStatusCode.INTERNAL_SERVER_ERROR,
+        );
+      }
+
+      const officeViewerUrl = `https://view.officeapps.live.com/op/view.aspx?src=${encodeURIComponent(data.signedUrl)}`;
+
+      res.status(HttpStatusCode.OK).json({
+        message: successMessages.successGetPhoto,
+        data: {
+          file,
+          url: officeViewerUrl,
         },
       });
     });

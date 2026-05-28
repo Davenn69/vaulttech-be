@@ -6,6 +6,7 @@ import {
   getDeletedFolders,
   getFavouriteFolders,
   getFolders,
+  getSharedFolders,
   removeFavourite,
   restoreFolder,
   updateFolder,
@@ -15,6 +16,7 @@ const route = Router();
 
 route.post("/", createFolder);
 
+route.get("/shared", getSharedFolders);
 route.get("/favourite", getFavouriteFolders);
 route.get("/deleted", getDeletedFolders);
 route.get("/:parentId", getFolders);

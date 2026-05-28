@@ -168,22 +168,20 @@ export const getWordFile = async (
       const [file] = await tx
         .select()
         .from(files)
-        .where(
-          and(
-            eq(files.id, id),
-            eq(files.userId, profile.id),
-            eq(files.isDeleted, false),
-          ),
-        )
+        .where(and(eq(files.id, id), eq(files.isDeleted, false)))
         .limit(1);
 
-      if (!file || file.userId !== profile.id || file.isDeleted) {
+      if (!file || file.isDeleted) {
         throw new CustomError(errors.fileNotFound, HttpStatusCode.NOT_FOUND);
       }
 
       const { data: bucketFile, error: bucketError } = await supabase.storage
         .from("Documents")
         .download(file.path);
+
+      console.log(bucketError);
+      console.log(bucketFile);
+      console.log(file.path);
 
       if (bucketError || !bucketFile)
         throw new CustomError(
