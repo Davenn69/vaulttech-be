@@ -5,6 +5,12 @@ class SuccessMessages {
   successCreateWordFile: string = "word file has been successfully created";
   successCreateExcelFile: string = "excel file has been successfully created";
   successRetrieveWordFile: string = "successfully retrieved word file";
+  successRetrieveWordCollaboration: string =
+    "successfully retrieved word collaboration state";
+  successJoinWordCollaboration: string =
+    "successfully joined word collaboration session";
+  successSyncWordCollaboration: string =
+    "successfully synced word collaboration state";
   successRetrieveExcelFile: string = "successfully retrieved excel file";
   successSaveWordFile: string = "word file has been successfully saved";
   successSaveExcelFile: string = "excel file has been successfully saved";
