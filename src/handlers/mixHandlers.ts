@@ -4,7 +4,7 @@ import { successMessages } from "../utils/successMessages";
 import { db } from "..";
 import { validateToken } from "../middlewares/protected";
 import { profiles } from "../models/profiles";
-import { and, eq, ilike, SQL } from "drizzle-orm";
+import { and, eq, ilike, ne, SQL } from "drizzle-orm";
 import { errors } from "../utils/errorMessages";
 import { HttpStatusCode } from "../types/httpStatusCode";
 import { files } from "../models/files";
@@ -66,13 +66,20 @@ export const getRecent = async (
       if (!profile)
         throw new CustomError(errors.invalidUser, HttpStatusCode.BAD_REQUEST);
 
+      const folderConditions = [
+        eq(folders.userId, profile.id),
+        eq(folders.isDeleted, false),
+      ];
+
+      if (profile.homeFolderId) {
+        folderConditions.push(ne(folders.id, profile.homeFolderId));
+      }
+
       const [folderData, fileData] = await Promise.all([
         tx
           .select()
           .from(folders)
-          .where(
-            and(eq(folders.userId, profile.id), eq(folders.isDeleted, false)),
-          ),
+          .where(and(...folderConditions)),
         tx
           .select()
           .from(files)

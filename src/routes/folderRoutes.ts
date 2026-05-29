@@ -8,6 +8,7 @@ import {
   getFolders,
   getSharedFolders,
   removeFavourite,
+  deletePermanentFolder,
   restoreFolder,
   updateFolder,
 } from "../handlers/folderHandlers";
@@ -27,5 +28,6 @@ route.patch("/addFavourite", addFavourite);
 route.patch("/removeFavourite", removeFavourite);
 
 route.delete("/delete/:id", deleteFolder);
+route.delete("/permanent/:id", deletePermanentFolder);
 
 export default route;

@@ -34,6 +34,8 @@ class ErrorMessages {
   fileNotFound: string = "file not found";
   fileNotAccessible: string = "file not accessible";
   folderNotFound: string = "folder not found";
+  fileDeleteFailed: string = "unable to delete file";
+  folderDeleteFailed: string = "unable to delete folder";
   categoryNotFound: string = "category not found";
   permissionNotFound: string = "permission not found";
   permissionAlreadyExists: string = "permission already exists";

@@ -18,6 +18,7 @@ class SuccessMessages {
   successRetrieveSharedFiles: string = "successfully retrieved shared files";
   successUpdateFile: string = "successfully updated file";
   successDeleteFile: string = "successfully deleted file";
+  successPermanentDeleteFile: string = "successfully permanently deleted file";
   successRestoreFile: string = "successfully restore file";
   successDownloadFile: string = "successfully download file";
   successCreateFolder: string = "successfully created folder";
@@ -26,6 +27,8 @@ class SuccessMessages {
     "successfully retrieved shared folders";
   successUpdateFolder: string = "successfully updated folder";
   successDeleteFolder: string = "successfully deleted folder";
+  successPermanentDeleteFolder: string =
+    "successfully permanently deleted folder";
   successRestoreFolder: string = "successfully restore folder";
   successCreateCategory: string = "successfully created category";
   successRetrieveCategories: string = "successfully retrieved categories";

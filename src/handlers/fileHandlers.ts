@@ -223,6 +223,7 @@ export const getFiles = async (
       });
     });
   } catch (e: any) {
+    console.log(e);
     if (e.constructor.name === "DrizzleQueryError") {
       next(new DrizzleErrorCode(e.cause.code));
     } else {
@@ -494,7 +495,7 @@ export const deleteFile = async (
 
       const [file] = await tx
         .update(files)
-        .set({ isDeleted: true })
+        .set({ isDeleted: true, isFavourite: false })
         .where(
           and(
             eq(files.id, id),
@@ -510,6 +511,83 @@ export const deleteFile = async (
       res
         .status(HttpStatusCode.OK)
         .json({ message: successMessages.successDeleteFile, data: file });
+    });
+  } catch (e: any) {
+    if (e.constructor.name === "DrizzleQueryError") {
+      next(new DrizzleErrorCode(e.cause.code));
+    } else {
+      next(e);
+    }
+  }
+};
+
+export const deletePermanentFile = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    const { id } = req.params;
+
+    if (!id)
+      throw new CustomError(errors.idMissing, HttpStatusCode.BAD_REQUEST);
+
+    const userData = await validateToken(req.headers.authorization);
+
+    await db.transaction(async (tx) => {
+      const [profile] = await tx
+        .select()
+        .from(profiles)
+        .where(eq(profiles.id, userData.user.id))
+        .limit(1);
+
+      if (!profile)
+        throw new CustomError(errors.invalidUser, HttpStatusCode.BAD_REQUEST);
+
+      const [file] = await tx
+        .select()
+        .from(files)
+        .where(
+          and(
+            eq(files.id, id),
+            eq(files.userId, userData.user.id),
+            eq(files.isDeleted, true),
+          ),
+        )
+        .limit(1);
+
+      if (!file)
+        throw new CustomError(errors.fileNotFound, HttpStatusCode.NOT_FOUND);
+
+      const { error: bucketError } = await supabase.storage
+        .from("Documents")
+        .remove([file.path]);
+
+      if (bucketError) {
+        throw new CustomError(
+          errors.fileDeleteFailed,
+          HttpStatusCode.INTERNAL_SERVER_ERROR,
+        );
+      }
+
+      const [deletedFile] = await tx
+        .delete(files)
+        .where(
+          and(
+            eq(files.id, id),
+            eq(files.userId, userData.user.id),
+            eq(files.isDeleted, true),
+          ),
+        )
+        .returning();
+
+      if (!deletedFile)
+        throw new CustomError(errors.fileNotFound, HttpStatusCode.NOT_FOUND);
+
+      res.status(HttpStatusCode.OK).json({
+        message: successMessages.successPermanentDeleteFile,
+        data: deletedFile,
+      });
     });
   } catch (e: any) {
     if (e.constructor.name === "DrizzleQueryError") {
@@ -730,7 +808,11 @@ export const selectFavourites = async (
         .select()
         .from(files)
         .where(
-          and(eq(files.userId, userData.user.id), eq(files.isFavourite, true)),
+          and(
+            eq(files.userId, userData.user.id),
+            eq(files.isFavourite, true),
+            eq(files.isDeleted, false),
+          ),
         );
 
       res

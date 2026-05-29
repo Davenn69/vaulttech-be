@@ -5,12 +5,13 @@ import { supabase } from "../utils/supabase";
 import { successMessages } from "../utils/successMessages";
 import { db } from "..";
 import { profiles } from "../models/profiles";
-import { and, desc, eq, ilike } from "drizzle-orm";
+import { and, desc, eq, ilike, inArray } from "drizzle-orm";
 import { folders } from "../models/folders";
 import { DrizzleErrorCode } from "../types/drizzleError";
 import { HttpStatusCode } from "../types/httpStatusCode";
 import { validateToken } from "../middlewares/protected";
 import { folderPermissions } from "../models/folder_permissions";
+import { files } from "../models/files";
 
 export const createFolder = async (
   req: Request,
@@ -309,7 +310,7 @@ export const deleteFolder = async (
 
       const [folder] = await tx
         .update(folders)
-        .set({ isDeleted: true })
+        .set({ isDeleted: true, isFavourite: false })
         .where(
           and(
             eq(folders.userId, userData.user.id),
@@ -334,6 +335,128 @@ export const deleteFolder = async (
   }
 };
 
+export const deletePermanentFolder = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    const { id } = req.params;
+
+    if (!id)
+      throw new CustomError(errors.folderIdMissing, HttpStatusCode.BAD_REQUEST);
+
+    const userData = await validateToken(req.headers.authorization);
+
+    await db.transaction(async (tx) => {
+      const [profile] = await tx
+        .select()
+        .from(profiles)
+        .where(eq(profiles.id, userData.user.id))
+        .limit(1);
+
+      if (!profile)
+        throw new CustomError(errors.invalidUser, HttpStatusCode.BAD_REQUEST);
+
+      const [targetFolder] = await tx
+        .select()
+        .from(folders)
+        .where(
+          and(
+            eq(folders.id, id),
+            eq(folders.userId, userData.user.id),
+            eq(folders.isDeleted, true),
+          ),
+        )
+        .limit(1);
+
+      if (!targetFolder)
+        throw new CustomError(errors.folderNotFound, HttpStatusCode.NOT_FOUND);
+
+      const folderIds: string[] = [];
+      const queue: string[] = [targetFolder.id];
+
+      while (queue.length > 0) {
+        const currentFolderId = queue.shift()!;
+        folderIds.push(currentFolderId);
+
+        const childFolders = await tx
+          .select({ id: folders.id })
+          .from(folders)
+          .where(
+            and(
+              eq(folders.parentId, currentFolderId),
+              eq(folders.userId, userData.user.id),
+            ),
+          );
+
+        queue.push(...childFolders.map((folder) => folder.id));
+      }
+
+      const filesInTree = await tx
+        .select({ path: files.path })
+        .from(files)
+        .where(
+          and(
+            eq(files.userId, userData.user.id),
+            inArray(files.folderId, folderIds),
+          ),
+        );
+
+      if (filesInTree.length > 0) {
+        const { error: bucketError } = await supabase.storage
+          .from("Documents")
+          .remove(filesInTree.map((file) => file.path));
+
+        if (bucketError) {
+          throw new CustomError(
+            errors.fileDeleteFailed,
+            HttpStatusCode.INTERNAL_SERVER_ERROR,
+          );
+        }
+      }
+
+      await tx
+        .delete(files)
+        .where(
+          and(
+            eq(files.userId, userData.user.id),
+            inArray(files.folderId, folderIds),
+          ),
+        );
+
+      let deletedTargetFolder = targetFolder;
+
+      for (const folderId of [...folderIds].reverse()) {
+        const [deletedFolder] = await tx
+          .delete(folders)
+          .where(
+            and(
+              eq(folders.id, folderId),
+              eq(folders.userId, userData.user.id),
+            ),
+          )
+          .returning();
+
+        if (folderId === targetFolder.id && deletedFolder) {
+          deletedTargetFolder = deletedFolder;
+        }
+      }
+
+      res.status(HttpStatusCode.OK).json({
+        message: successMessages.successPermanentDeleteFolder,
+        data: deletedTargetFolder,
+      });
+    });
+  } catch (e: any) {
+    if (e.constructor.name === "DrizzleQueryError") {
+      next(new DrizzleErrorCode(e.cause.code));
+    } else {
+      next(e);
+    }
+  }
+};
+
 export const restoreFolder = async (
   req: Request,
   res: Response,
@@ -342,7 +465,7 @@ export const restoreFolder = async (
   try {
     const { id } = req.body;
     if (!id)
-      throw new CustomError(errors.invalidUser, HttpStatusCode.BAD_REQUEST);
+      throw new CustomError(errors.folderIdMissing, HttpStatusCode.BAD_REQUEST);
 
     const userData = await validateToken(req.headers.authorization);
 
@@ -360,10 +483,11 @@ export const restoreFolder = async (
         .where(
           and(
             eq(folders.id, id),
-            eq(folders.userId, profile.id),
+            eq(folders.userId, userData.user.id),
             eq(folders.isDeleted, true),
           ),
-        );
+        )
+        .returning();
       if (!folder)
         throw new CustomError(errors.folderNotFound, HttpStatusCode.NOT_FOUND);
 
@@ -372,7 +496,7 @@ export const restoreFolder = async (
         .json({ message: successMessages.successRestoreFolder, data: folder });
     });
   } catch (e: any) {
-    if (e.constructor.name === "DrizzleCustomError") {
+    if (e.constructor.name === "DrizzleQueryError") {
       next(new DrizzleErrorCode(e.cause.code));
     } else {
       next(e);
@@ -500,7 +624,11 @@ export const getFavouriteFolders = async (
         .select()
         .from(folders)
         .where(
-          and(eq(folders.userId, profile.id), eq(folders.isFavourite, true)),
+          and(
+            eq(folders.userId, profile.id),
+            eq(folders.isFavourite, true),
+            eq(folders.isDeleted, false),
+          ),
         );
 
       res.status(HttpStatusCode.OK).json({

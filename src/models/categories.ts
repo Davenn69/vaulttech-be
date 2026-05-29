@@ -5,6 +5,7 @@ import {
   uuid,
   varchar,
 } from "drizzle-orm/pg-core";
+import { authUsers } from "./auth";
 
 export const categories = pgTable("categories", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -16,4 +17,7 @@ export const categories = pgTable("categories", {
   color: varchar("color").notNull(),
   approvalRequired: boolean("approval_required").default(false).notNull(),
   approvalRole: varchar("approval_role"),
+  userId: uuid("user_id")
+    .references(() => authUsers.id)
+    .notNull(),
 });
