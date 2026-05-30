@@ -18,6 +18,12 @@ import {
   createExcelDocumentFromEditorContent,
   createBlankExcelDocument,
 } from "../utils/excelUtils";
+import {
+  buildFileRevisionBasePath,
+  buildInitialRevisionStorageKey,
+  buildNextRevisionStorageKey,
+  resolveFileRevisionBasePath,
+} from "../utils/fileStorage";
 
 const buildFileHash = (buffer: Buffer) => {
   return createHash("sha256").update(buffer).digest("hex");
@@ -64,8 +70,11 @@ export const createExcelFile = async (
       const documentBuffer = createBlankExcelDocument();
       const fileName = "Untitled";
       const fileExt = "xlsx";
-      const uniqueName = `${uuidv4()}.${fileExt}`;
-      const filePath = `${profile.id}/${folderId}/${uniqueName}`;
+      const uniqueName = uuidv4();
+      const filePath = buildInitialRevisionStorageKey(
+        buildFileRevisionBasePath(profile.id, folderId, uniqueName),
+        fileExt,
+      );
       const fileHash = buildFileHash(documentBuffer);
 
       const { error: bucketError } = await supabase.storage
@@ -269,7 +278,12 @@ export const saveExcelFile = async (
         .limit(1);
 
       const nextVersion = Number(latestRevision?.versionNumber ?? 0) + 1;
-      const storageKey = `${profile.id}/${file.folderId}/${file.id}/revisions/${uuidv4()}.xlsx`;
+      const storageBasePath = resolveFileRevisionBasePath(file.path);
+      const storageKey = buildNextRevisionStorageKey(
+        storageBasePath,
+        file.extension,
+        nextVersion,
+      );
       const fileHash = buildFileHash(documentBuffer);
 
       const { error: bucketError } = await supabase.storage

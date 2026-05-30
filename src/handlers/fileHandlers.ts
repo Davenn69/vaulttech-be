@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from "express";
 import CustomError from "../types/errorCustom";
 import { errors } from "../utils/errorMessages";
 import path from "path";
+import { createHash } from "crypto";
 import { supabase } from "../utils/supabase";
 import { successMessages } from "../utils/successMessages";
 import { v4 as uuidv4 } from "uuid";
@@ -18,8 +19,18 @@ import { validateToken } from "../middlewares/protected";
 import { createClient } from "@supabase/supabase-js";
 import { documentSupervisors } from "../models/document_supervisors";
 import { filePermissions } from "../models/file_permissions";
+import { fileRevisions } from "../models/file_revisions";
+import {
+  buildFileRevisionBasePath,
+  buildInitialRevisionStorageKey,
+} from "../utils/fileStorage";
 
 const IMAGE_EXTENSIONS = new Set(["jpg", "jpeg", "png"]);
+
+const buildFileHash = (buffer: Buffer) => {
+  return createHash("sha256").update(buffer).digest("hex");
+};
+
 type SharedPermission = {
   id: number;
   createdAt: string;
@@ -74,10 +85,12 @@ export const uploadFile = async (
       const fileExt = path.extname(file.originalname).replaceAll(".", "");
       const fileSize = file.size;
       const fileName = file.originalname.split(".")[0]!;
-      const uniqueName = `${uuidv4()}.${fileExt}`;
-      const filePath = `${profile.id}/${folderId}/${uniqueName}`;
-
-      console.log("wow");
+      const uniqueName = uuidv4();
+      const filePath = buildInitialRevisionStorageKey(
+        buildFileRevisionBasePath(profile.id, folderId, uniqueName),
+        fileExt,
+      );
+      const fileHash = buildFileHash(file.buffer);
 
       const { error: bucketError } = await supabase.storage
         .from("Documents")
@@ -89,30 +102,54 @@ export const uploadFile = async (
       if (bucketError)
         throw new CustomError(bucketError.message, HttpStatusCode.BAD_REQUEST);
 
-      console.log("success");
+      try {
+        const [fileData] = await tx
+          .insert(files)
+          .values({
+            userId: profile.id,
+            extension: fileExt,
+            name: fileName,
+            createdBy: profile.username,
+            size: fileSize,
+            path: filePath,
+            folderId: folderId,
+          })
+          .returning();
 
-      const [fileData] = await tx
-        .insert(files)
-        .values({
-          userId: profile.id,
-          extension: fileExt,
-          name: fileName,
-          createdBy: profile.username,
-          size: fileSize,
-          path: filePath,
-          folderId: folderId,
-        })
-        .returning();
+        if (!fileData)
+          throw new CustomError(
+            errors.uploadFileFailed,
+            HttpStatusCode.BAD_REQUEST,
+          );
 
-      if (!fileData)
-        throw new CustomError(
-          errors.uploadFileFailed,
-          HttpStatusCode.BAD_REQUEST,
-        );
+        const [revisionData] = await tx
+          .insert(fileRevisions)
+          .values({
+            fileId: fileData.id,
+            versionNumber: 1,
+            storageKey: filePath,
+            fileHash,
+            size: fileSize,
+          })
+          .returning();
 
-      res
-        .status(HttpStatusCode.CREATED)
-        .json({ message: successMessages.successUpload, data: fileData });
+        if (!revisionData)
+          throw new CustomError(
+            errors.uploadFileFailed,
+            HttpStatusCode.BAD_REQUEST,
+          );
+
+        res
+          .status(HttpStatusCode.CREATED)
+          .json({ message: successMessages.successUpload, data: fileData });
+      } catch (error) {
+        try {
+          await supabase.storage.from("Documents").remove([filePath]);
+        } catch {
+          // Best effort cleanup only.
+        }
+        throw error;
+      }
     });
   } catch (e: any) {
     if (e.constructor.name === "DrizzleQueryError") {

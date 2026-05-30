@@ -29,6 +29,12 @@ import {
   createWordDocumentFromTiptap,
   extractWordDocumentParts,
 } from "../utils/wordUtils";
+import {
+  buildFileRevisionBasePath,
+  buildInitialRevisionStorageKey,
+  buildNextRevisionStorageKey,
+  resolveFileRevisionBasePath,
+} from "../utils/fileStorage";
 
 const buildFileHash = (buffer: Buffer) => {
   return createHash("sha256").update(buffer).digest("hex");
@@ -67,8 +73,11 @@ export const createWordFile = async (
       const documentBuffer = createBlankWordDocument();
       const fileName = "Untitled";
       const fileExt = "docx";
-      const uniqueName = `${uuidv4()}.${fileExt}`;
-      const filePath = `${profile.id}/${folderId}/${uniqueName}`;
+      const uniqueName = uuidv4();
+      const filePath = buildInitialRevisionStorageKey(
+        buildFileRevisionBasePath(profile.id, folderId, uniqueName),
+        fileExt,
+      );
       const fileHash = buildFileHash(documentBuffer);
 
       const { error: bucketError } = await supabase.storage
@@ -79,9 +88,6 @@ export const createWordFile = async (
           cacheControl: "3600",
           upsert: false,
         });
-
-      console.log(filePath);
-      console.log(bucketError);
 
       if (bucketError)
         throw new CustomError(bucketError.message, HttpStatusCode.BAD_REQUEST);
@@ -278,7 +284,12 @@ export const save = async (req: Request, res: Response, next: NextFunction) => {
         .limit(1);
 
       const nextVersion = Number(latestRevision?.versionNumber ?? 0) + 1;
-      const storageKey = `${profile.id}/${file.folderId}/${file.id}/revisions/${uuidv4()}.docx`;
+      const storageBasePath = resolveFileRevisionBasePath(file.path);
+      const storageKey = buildNextRevisionStorageKey(
+        storageBasePath,
+        file.extension,
+        nextVersion,
+      );
       const fileHash = buildFileHash(documentBuffer);
 
       const { error: bucketError } = await supabase.storage

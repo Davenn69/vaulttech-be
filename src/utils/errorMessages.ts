@@ -42,6 +42,7 @@ class ErrorMessages {
   permissionNotCreated: string = "permission not created";
   permissionNotAllowed: string = "you are not allowed to grant this permission";
   reviewNotFound: string = "review not found";
+  revisionNotFound: string = "revision not found";
   invitationAlreadyExists: string = "invitation already exists";
   invitationNotFound: string = "invitation not found";
   invitationAlreadyProcessed: string = "invitation already processed";

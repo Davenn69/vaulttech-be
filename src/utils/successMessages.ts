@@ -17,6 +17,7 @@ class SuccessMessages {
   successRetrieveFiles: string = "successfully retrieved files";
   successRetrieveSharedFiles: string = "successfully retrieved shared files";
   successUpdateFile: string = "successfully updated file";
+  successRevertFile: string = "successfully reverted file to selected revision";
   successDeleteFile: string = "successfully deleted file";
   successPermanentDeleteFile: string = "successfully permanently deleted file";
   successRestoreFile: string = "successfully restore file";
@@ -52,6 +53,8 @@ class SuccessMessages {
 
   successGetRecent: string = "successfully get recent data";
   successGetFileHistory: string = "successfully get file histories";
+  successDownloadFileRevision: string =
+    "successfully download file revision";
   successGetPhoto: string = "successfully load photo";
   successCreateInvitation: string = "invitation has been successfully created";
   successAcceptInvitation: string = "invitation has been successfully accepted";
