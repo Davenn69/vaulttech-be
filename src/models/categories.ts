@@ -15,8 +15,6 @@ export const categories = pgTable("categories", {
   updatedAt: timestamp("updated_at", { withTimezone: true, mode: "string" }),
   name: varchar("name").notNull(),
   color: varchar("color").notNull(),
-  approvalRequired: boolean("approval_required").default(false).notNull(),
-  approvalRole: varchar("approval_role"),
   userId: uuid("user_id")
     .references(() => authUsers.id)
     .notNull(),

@@ -188,8 +188,6 @@ export const getFiles = async (
             id: categories.id,
             name: categories.name,
             color: categories.color,
-            approvalRequired: categories.approvalRequired,
-            approvalRole: categories.approvalRole,
             createdAt: categories.createdAt,
             updatedAt: categories.updatedAt,
           },
