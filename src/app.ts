@@ -50,6 +50,12 @@ app.use("/api/v1/review", protect, reviewRoutes);
 app.use("/api/v1/permission", protect, permissionRoutes);
 //
 
+app.get("/debug-env", (req, res) => {
+  res.json({
+    hasDatabaseUrl: !!process.env.DATABASE_URL,
+  });
+});
+
 app.use(drizzleError);
 app.use(errorHandler);
 
