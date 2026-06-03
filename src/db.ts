@@ -4,7 +4,26 @@ import { drizzle } from "drizzle-orm/postgres-js";
 
 dotenv.config();
 
-const connectionString = process.env.DATABASE_URL!;
-const client = postgres(connectionString);
+const createUnconfiguredDb = () =>
+  new Proxy(
+    function runtimeDbProxy() {},
+    {
+      get() {
+        return createUnconfiguredDb();
+      },
+      apply() {
+        throw new Error(
+          "Missing DATABASE_URL. Set it in Vercel environment variables.",
+        );
+      },
+    },
+  );
 
-export const db = drizzle(client);
+const connectionString = process.env.DATABASE_URL;
+const client = connectionString ? postgres(connectionString) : null;
+
+type DbClient = ReturnType<typeof drizzle>;
+
+export const db: DbClient = client
+  ? drizzle(client)
+  : (createUnconfiguredDb() as unknown as DbClient);
