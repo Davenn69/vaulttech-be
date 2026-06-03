@@ -10,7 +10,7 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "description": "",
+  "description": "hello",
   "dependencies": {
     "@supabase/supabase-js": "^2.79.0",
     "cookie-parser": "^1.4.7",
