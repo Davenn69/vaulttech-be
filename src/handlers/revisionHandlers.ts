@@ -16,6 +16,15 @@ import {
   buildNextRevisionStorageKey,
   resolveFileRevisionBasePath,
 } from "../utils/fileStorage";
+import {
+  ensureWordCollaborationDocument,
+  normalizeWordContent,
+  saveWordCollaborationEvent,
+} from "../services/wordCollaboration";
+import {
+  convertWordDocumentXmlToTiptap,
+  extractWordDocumentParts,
+} from "../utils/wordUtils";
 
 const buildFileHash = (buffer: Buffer) => {
   return createHash("sha256").update(buffer).digest("hex");
@@ -154,11 +163,23 @@ export const revertRevision = async (
 
       const buffer = Buffer.from(await revisionBlob.arrayBuffer());
       const fileHash = buildFileHash(buffer);
+      let revertedWordContent: ReturnType<typeof normalizeWordContent> | null =
+        null;
+
+      if ((file.extension ?? "").toLowerCase() === "docx") {
+        const { documentXml, numberingXml } = extractWordDocumentParts(buffer);
+        revertedWordContent = normalizeWordContent(
+          convertWordDocumentXmlToTiptap(documentXml, numberingXml),
+        );
+      }
 
       const { error: uploadError } = await supabase.storage
         .from("Documents")
         .upload(storageKey, buffer, {
-          contentType: "application/octet-stream",
+          contentType:
+            file.extension.toLowerCase() === "docx"
+              ? "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+              : "application/octet-stream",
           cacheControl: "3600",
           upsert: false,
         });
@@ -200,6 +221,29 @@ export const revertRevision = async (
             errors.uploadFileFailed,
             HttpStatusCode.BAD_REQUEST,
           );
+
+        if (revertedWordContent) {
+          const collaborationDocument = await ensureWordCollaborationDocument(
+            tx,
+            file.id,
+            revertedWordContent,
+            profile.id,
+            nextVersion,
+          );
+
+          await saveWordCollaborationEvent(
+            tx,
+            file.id,
+            profile.id,
+            "revert",
+            {
+              fromRevisionId: revision.id,
+              toRevisionId: revertRevision.id,
+              versionNumber: nextVersion,
+              collaborationDocumentId: collaborationDocument.id,
+            },
+          );
+        }
 
         return res.status(HttpStatusCode.OK).json({
           message: successMessages.successRevertFile,

@@ -6,8 +6,9 @@ const normalizeStoragePath = (storagePath: string) =>
 export const buildFileRevisionBasePath = (
   profileId: string,
   folderId: string,
+  fileId: string,
   uniqueName: string,
-) => `${profileId}/${folderId}/${uniqueName}`;
+) => `${profileId}/${folderId}/${fileId}/${uniqueName}`;
 
 export const buildInitialRevisionStorageKey = (
   basePath: string,

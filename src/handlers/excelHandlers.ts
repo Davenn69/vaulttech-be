@@ -68,11 +68,12 @@ export const createExcelFile = async (
         throw new CustomError(errors.folderNotFound, HttpStatusCode.NOT_FOUND);
 
       const documentBuffer = createBlankExcelDocument();
+      const fileId = uuidv4();
       const fileName = "Untitled";
       const fileExt = "xlsx";
       const uniqueName = uuidv4();
       const filePath = buildInitialRevisionStorageKey(
-        buildFileRevisionBasePath(profile.id, folderId, uniqueName),
+        buildFileRevisionBasePath(profile.id, folderId, fileId, uniqueName),
         fileExt,
       );
       const fileHash = buildFileHash(documentBuffer);
@@ -93,6 +94,7 @@ export const createExcelFile = async (
         const [fileData] = await tx
           .insert(files)
           .values({
+            id: fileId,
             userId: profile.id,
             folderId,
             name: fileName,

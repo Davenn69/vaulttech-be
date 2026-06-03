@@ -82,12 +82,13 @@ export const uploadFile = async (
         throw new CustomError(errors.invalidUser, HttpStatusCode.BAD_REQUEST);
 
       const file = req.file!;
+      const fileId = uuidv4();
       const fileExt = path.extname(file.originalname).replaceAll(".", "");
       const fileSize = file.size;
       const fileName = file.originalname.split(".")[0]!;
       const uniqueName = uuidv4();
       const filePath = buildInitialRevisionStorageKey(
-        buildFileRevisionBasePath(profile.id, folderId, uniqueName),
+        buildFileRevisionBasePath(profile.id, folderId, fileId, uniqueName),
         fileExt,
       );
       const fileHash = buildFileHash(file.buffer);
@@ -106,6 +107,7 @@ export const uploadFile = async (
         const [fileData] = await tx
           .insert(files)
           .values({
+            id: fileId,
             userId: profile.id,
             extension: fileExt,
             name: fileName,

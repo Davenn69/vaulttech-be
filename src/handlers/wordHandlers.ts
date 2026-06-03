@@ -71,11 +71,12 @@ export const createWordFile = async (
         throw new CustomError(errors.folderNotFound, HttpStatusCode.NOT_FOUND);
 
       const documentBuffer = createBlankWordDocument();
+      const fileId = uuidv4();
       const fileName = "Untitled";
       const fileExt = "docx";
       const uniqueName = uuidv4();
       const filePath = buildInitialRevisionStorageKey(
-        buildFileRevisionBasePath(profile.id, folderId, uniqueName),
+        buildFileRevisionBasePath(profile.id, folderId, fileId, uniqueName),
         fileExt,
       );
       const fileHash = buildFileHash(documentBuffer);
@@ -96,6 +97,7 @@ export const createWordFile = async (
         const [fileData] = await tx
           .insert(files)
           .values({
+            id: fileId,
             userId: profile.id,
             folderId,
             name: fileName,
