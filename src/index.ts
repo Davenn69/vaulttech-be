@@ -1,7 +1,6 @@
 import http from "http";
 import app from "./app";
 import "./db";
-import { attachWordCollaborationServer } from "./realtime/wordCollaborationServer";
 const PORT = process.env.PORT;
 
 process.on("unhandledRejection", (reason, promise) => {
@@ -13,8 +12,6 @@ process.on("uncaughtException", (error) => {
 });
 
 const server = http.createServer(app);
-
-attachWordCollaborationServer(server);
 
 server.listen(PORT, () => {
   console.log(`Server is running in PORT ${PORT}`);
