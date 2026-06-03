@@ -5,13 +5,21 @@ class SuccessMessages {
   successCreateWordFile: string = "word file has been successfully created";
   successCreateExcelFile: string = "excel file has been successfully created";
   successRetrieveWordFile: string = "successfully retrieved word file";
+  successRetrieveWordCollaboration: string =
+    "successfully retrieved word collaboration state";
+  successJoinWordCollaboration: string =
+    "successfully joined word collaboration session";
+  successSyncWordCollaboration: string =
+    "successfully synced word collaboration state";
   successRetrieveExcelFile: string = "successfully retrieved excel file";
   successSaveWordFile: string = "word file has been successfully saved";
   successSaveExcelFile: string = "excel file has been successfully saved";
   successRetrieveFiles: string = "successfully retrieved files";
   successRetrieveSharedFiles: string = "successfully retrieved shared files";
   successUpdateFile: string = "successfully updated file";
+  successRevertFile: string = "successfully reverted file to selected revision";
   successDeleteFile: string = "successfully deleted file";
+  successPermanentDeleteFile: string = "successfully permanently deleted file";
   successRestoreFile: string = "successfully restore file";
   successDownloadFile: string = "successfully download file";
   successCreateFolder: string = "successfully created folder";
@@ -20,6 +28,8 @@ class SuccessMessages {
     "successfully retrieved shared folders";
   successUpdateFolder: string = "successfully updated folder";
   successDeleteFolder: string = "successfully deleted folder";
+  successPermanentDeleteFolder: string =
+    "successfully permanently deleted folder";
   successRestoreFolder: string = "successfully restore folder";
   successCreateCategory: string = "successfully created category";
   successRetrieveCategories: string = "successfully retrieved categories";
@@ -43,6 +53,8 @@ class SuccessMessages {
 
   successGetRecent: string = "successfully get recent data";
   successGetFileHistory: string = "successfully get file histories";
+  successDownloadFileRevision: string =
+    "successfully download file revision";
   successGetPhoto: string = "successfully load photo";
   successCreateInvitation: string = "invitation has been successfully created";
   successAcceptInvitation: string = "invitation has been successfully accepted";

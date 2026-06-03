@@ -14,26 +14,34 @@ import { fileRevisions } from "../models/file_revisions";
 import { DrizzleErrorCode } from "../types/drizzleError";
 import { createHash } from "crypto";
 import {
+  createEmptyTiptapDocument,
+  ensureWordCollaborationDocument,
+  loadWordCollaborationSnapshot,
+  loadWordDocumentFromStorage,
+  normalizeWordContent,
+  resolveWordFileAccess,
+  saveWordCollaborationEvent,
+  upsertWordCollaborationSession,
+} from "../services/wordCollaboration";
+import {
   convertWordDocumentXmlToTiptap,
   createBlankWordDocument,
   createWordDocumentFromTiptap,
   extractWordDocumentParts,
 } from "../utils/wordUtils";
+import {
+  buildFileRevisionBasePath,
+  buildInitialRevisionStorageKey,
+  buildNextRevisionStorageKey,
+  resolveFileRevisionBasePath,
+} from "../utils/fileStorage";
 
 const buildFileHash = (buffer: Buffer) => {
   return createHash("sha256").update(buffer).digest("hex");
 };
 
 const parseWordContent = (content: unknown) => {
-  if (typeof content !== "string") {
-    return content;
-  }
-
-  try {
-    return JSON.parse(content);
-  } catch {
-    throw new CustomError(errors.missingBody, HttpStatusCode.BAD_REQUEST);
-  }
+  return normalizeWordContent(content);
 };
 
 export const createWordFile = async (
@@ -63,10 +71,14 @@ export const createWordFile = async (
         throw new CustomError(errors.folderNotFound, HttpStatusCode.NOT_FOUND);
 
       const documentBuffer = createBlankWordDocument();
+      const fileId = uuidv4();
       const fileName = "Untitled";
       const fileExt = "docx";
-      const uniqueName = `${uuidv4()}.${fileExt}`;
-      const filePath = `${profile.id}/${folderId}/${uniqueName}`;
+      const uniqueName = uuidv4();
+      const filePath = buildInitialRevisionStorageKey(
+        buildFileRevisionBasePath(profile.id, folderId, fileId, uniqueName),
+        fileExt,
+      );
       const fileHash = buildFileHash(documentBuffer);
 
       const { error: bucketError } = await supabase.storage
@@ -78,9 +90,6 @@ export const createWordFile = async (
           upsert: false,
         });
 
-      console.log(filePath);
-      console.log(bucketError);
-
       if (bucketError)
         throw new CustomError(bucketError.message, HttpStatusCode.BAD_REQUEST);
 
@@ -88,6 +97,7 @@ export const createWordFile = async (
         const [fileData] = await tx
           .insert(files)
           .values({
+            id: fileId,
             userId: profile.id,
             folderId,
             name: fileName,
@@ -115,15 +125,24 @@ export const createWordFile = async (
           })
           .returning();
 
-        if (!revisionData)
+          if (!revisionData)
           throw new CustomError(
             errors.uploadFileFailed,
             HttpStatusCode.BAD_REQUEST,
           );
 
+        const collaborationDocument = await ensureWordCollaborationDocument(
+          tx,
+          fileData.id,
+          createEmptyTiptapDocument(),
+          profile.id,
+          1,
+        );
+
         return res.status(HttpStatusCode.CREATED).json({
           message: successMessages.successCreateWordFile,
           data: fileData,
+          collaboration: collaborationDocument,
         });
       } catch (error) {
         try {
@@ -165,15 +184,7 @@ export const getWordFile = async (
       if (!profile)
         throw new CustomError(errors.invalidUser, HttpStatusCode.BAD_REQUEST);
 
-      const [file] = await tx
-        .select()
-        .from(files)
-        .where(and(eq(files.id, id), eq(files.isDeleted, false)))
-        .limit(1);
-
-      if (!file || file.isDeleted) {
-        throw new CustomError(errors.fileNotFound, HttpStatusCode.NOT_FOUND);
-      }
+      const { file } = await resolveWordFileAccess(tx, id, profile.id, "read");
 
       const { data: bucketFile, error: bucketError } = await supabase.storage
         .from("Documents")
@@ -196,11 +207,37 @@ export const getWordFile = async (
         numberingXml,
       );
 
+      const existingCollaborationState = await loadWordCollaborationSnapshot(
+        tx,
+        file.id,
+      );
+
+      const collaborationDocument = existingCollaborationState
+        ? existingCollaborationState
+        : {
+            document: normalizeWordContent(tiptapContent),
+            versionNumber: 1,
+          };
+
+      if (!existingCollaborationState) {
+        await ensureWordCollaborationDocument(
+          tx,
+          file.id,
+          collaborationDocument.document,
+          profile.id,
+          collaborationDocument.versionNumber,
+        );
+      }
+
       return res.status(HttpStatusCode.OK).json({
         message: successMessages.successRetrieveWordFile,
         data: {
           file,
-          content: tiptapContent,
+          content: collaborationDocument.document,
+          collaboration: {
+            document: collaborationDocument.document,
+            versionNumber: collaborationDocument.versionNumber,
+          },
         },
       });
     });
@@ -237,14 +274,7 @@ export const save = async (req: Request, res: Response, next: NextFunction) => {
       if (!profile)
         throw new CustomError(errors.invalidUser, HttpStatusCode.BAD_REQUEST);
 
-      const [file] = await tx
-        .select()
-        .from(files)
-        .where(and(eq(files.id, id), eq(files.userId, profile.id)))
-        .limit(1);
-
-      if (!file || file.isDeleted)
-        throw new CustomError(errors.fileNotFound, HttpStatusCode.NOT_FOUND);
+      const { file } = await resolveWordFileAccess(tx, id, profile.id, "write");
 
       const [latestRevision] = await tx
         .select({
@@ -256,7 +286,12 @@ export const save = async (req: Request, res: Response, next: NextFunction) => {
         .limit(1);
 
       const nextVersion = Number(latestRevision?.versionNumber ?? 0) + 1;
-      const storageKey = `${profile.id}/${file.folderId}/${file.id}/revisions/${uuidv4()}.docx`;
+      const storageBasePath = resolveFileRevisionBasePath(file.path);
+      const storageKey = buildNextRevisionStorageKey(
+        storageBasePath,
+        file.extension,
+        nextVersion,
+      );
       const fileHash = buildFileHash(documentBuffer);
 
       const { error: bucketError } = await supabase.storage
@@ -306,11 +341,34 @@ export const save = async (req: Request, res: Response, next: NextFunction) => {
             HttpStatusCode.BAD_REQUEST,
           );
 
+        const collaborationDocument = await ensureWordCollaborationDocument(
+          tx,
+          file.id,
+          normalizeWordContent(parsedContent),
+          profile.id,
+          nextVersion,
+        );
+
+        await saveWordCollaborationEvent(
+          tx,
+          file.id,
+          profile.id,
+          "snapshot",
+          {
+            versionNumber: nextVersion,
+            storageKey,
+            collaborationDocumentId: collaborationDocument.id,
+          },
+        );
+
         return res.status(HttpStatusCode.OK).json({
           message: successMessages.successSaveWordFile,
           data: {
             file: updatedFile,
             revision: revisionData,
+            collaboration: {
+              versionNumber: nextVersion,
+            },
           },
         });
       } catch (error) {
@@ -321,6 +379,205 @@ export const save = async (req: Request, res: Response, next: NextFunction) => {
         }
         throw error;
       }
+    });
+  } catch (e) {
+    if ((e as any)?.constructor?.name === "DrizzleQueryError") {
+      next(new DrizzleErrorCode((e as any).cause.code));
+    } else {
+      next(e);
+    }
+  }
+};
+
+export const getWordCollaboration = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    const { id } = req.params;
+    if (!id)
+      throw new CustomError(errors.idMissing, HttpStatusCode.BAD_REQUEST);
+
+    const userData = await validateToken(req.headers.authorization);
+
+    await db.transaction(async (tx) => {
+      const [profile] = await tx
+        .select()
+        .from(profiles)
+        .where(eq(profiles.id, userData.user.id))
+        .limit(1);
+
+      if (!profile)
+        throw new CustomError(errors.invalidUser, HttpStatusCode.BAD_REQUEST);
+
+      const { file } = await resolveWordFileAccess(tx, id, profile.id, "read");
+
+      const snapshot = await loadWordCollaborationSnapshot(tx, file.id);
+
+      if (!snapshot) {
+        const document = await loadWordDocumentFromStorage(file.path);
+        const collaborationDocument = await ensureWordCollaborationDocument(
+          tx,
+          file.id,
+          document,
+          profile.id,
+          1,
+        );
+
+        return res.status(HttpStatusCode.OK).json({
+          message: successMessages.successRetrieveWordCollaboration,
+          data: {
+            file,
+            collaboration: {
+              document: normalizeWordContent(collaborationDocument.state),
+              versionNumber: collaborationDocument.versionNumber,
+            },
+          },
+        });
+      }
+
+      return res.status(HttpStatusCode.OK).json({
+        message: successMessages.successRetrieveWordCollaboration,
+        data: {
+          file,
+          collaboration: snapshot,
+        },
+      });
+    });
+  } catch (e) {
+    if ((e as any)?.constructor?.name === "DrizzleQueryError") {
+      next(new DrizzleErrorCode((e as any).cause.code));
+    } else {
+      next(e);
+    }
+  }
+};
+
+export const joinWordCollaboration = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    const { id } = req.params;
+    const { connectionId, cursorState, selectionState } = req.body as {
+      connectionId?: string;
+      cursorState?: unknown;
+      selectionState?: unknown;
+    };
+
+    if (!id)
+      throw new CustomError(errors.idMissing, HttpStatusCode.BAD_REQUEST);
+
+    const userData = await validateToken(req.headers.authorization);
+
+    await db.transaction(async (tx) => {
+      const [profile] = await tx
+        .select()
+        .from(profiles)
+        .where(eq(profiles.id, userData.user.id))
+        .limit(1);
+
+      if (!profile)
+        throw new CustomError(errors.invalidUser, HttpStatusCode.BAD_REQUEST);
+
+      const { file } = await resolveWordFileAccess(tx, id, profile.id, "read");
+      const snapshot = await loadWordCollaborationSnapshot(tx, file.id);
+
+      if (!snapshot) {
+        const document = await loadWordDocumentFromStorage(file.path);
+        await ensureWordCollaborationDocument(tx, file.id, document, profile.id);
+      }
+
+      const session = await upsertWordCollaborationSession(tx, {
+        fileId: file.id,
+        userId: profile.id,
+        connectionId: connectionId ?? uuidv4(),
+        cursorState,
+        selectionState,
+      });
+
+      const latestSnapshot =
+        snapshot ?? (await loadWordCollaborationSnapshot(tx, file.id));
+
+      return res.status(HttpStatusCode.OK).json({
+        message: successMessages.successJoinWordCollaboration,
+        data: {
+          file,
+          session,
+          collaboration: latestSnapshot,
+        },
+      });
+    });
+  } catch (e) {
+    if ((e as any)?.constructor?.name === "DrizzleQueryError") {
+      next(new DrizzleErrorCode((e as any).cause.code));
+    } else {
+      next(e);
+    }
+  }
+};
+
+export const syncWordCollaboration = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    const { id } = req.params;
+    const { content, versionNumber } = req.body as {
+      content?: unknown;
+      versionNumber?: number;
+    };
+
+    if (!id)
+      throw new CustomError(errors.idMissing, HttpStatusCode.BAD_REQUEST);
+    if (content === undefined || content === null || content === "")
+      throw new CustomError(errors.missingBody, HttpStatusCode.BAD_REQUEST);
+
+    const parsedContent = normalizeWordContent(content);
+    const userData = await validateToken(req.headers.authorization);
+
+    await db.transaction(async (tx) => {
+      const [profile] = await tx
+        .select()
+        .from(profiles)
+        .where(eq(profiles.id, userData.user.id))
+        .limit(1);
+
+      if (!profile)
+        throw new CustomError(errors.invalidUser, HttpStatusCode.BAD_REQUEST);
+
+      const { file } = await resolveWordFileAccess(tx, id, profile.id, "write");
+      const collaborationDocument = await ensureWordCollaborationDocument(
+        tx,
+        file.id,
+        parsedContent,
+        profile.id,
+        versionNumber ?? undefined,
+      );
+
+      await saveWordCollaborationEvent(
+        tx,
+        file.id,
+        profile.id,
+        "sync",
+        {
+          versionNumber: collaborationDocument.versionNumber,
+        },
+      );
+
+      return res.status(HttpStatusCode.OK).json({
+        message: successMessages.successSyncWordCollaboration,
+        data: {
+          file,
+          collaboration: {
+            document: normalizeWordContent(collaborationDocument.state),
+            versionNumber: collaborationDocument.versionNumber,
+          },
+        },
+      });
     });
   } catch (e) {
     if ((e as any)?.constructor?.name === "DrizzleQueryError") {

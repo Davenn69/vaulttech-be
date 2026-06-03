@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from "express";
 import CustomError from "../types/errorCustom";
 import { errors } from "../utils/errorMessages";
 import path from "path";
+import { createHash } from "crypto";
 import { supabase } from "../utils/supabase";
 import { successMessages } from "../utils/successMessages";
 import { v4 as uuidv4 } from "uuid";
@@ -18,8 +19,18 @@ import { validateToken } from "../middlewares/protected";
 import { createClient } from "@supabase/supabase-js";
 import { documentSupervisors } from "../models/document_supervisors";
 import { filePermissions } from "../models/file_permissions";
+import { fileRevisions } from "../models/file_revisions";
+import {
+  buildFileRevisionBasePath,
+  buildInitialRevisionStorageKey,
+} from "../utils/fileStorage";
 
 const IMAGE_EXTENSIONS = new Set(["jpg", "jpeg", "png"]);
+
+const buildFileHash = (buffer: Buffer) => {
+  return createHash("sha256").update(buffer).digest("hex");
+};
+
 type SharedPermission = {
   id: number;
   createdAt: string;
@@ -71,13 +82,16 @@ export const uploadFile = async (
         throw new CustomError(errors.invalidUser, HttpStatusCode.BAD_REQUEST);
 
       const file = req.file!;
+      const fileId = uuidv4();
       const fileExt = path.extname(file.originalname).replaceAll(".", "");
       const fileSize = file.size;
       const fileName = file.originalname.split(".")[0]!;
-      const uniqueName = `${uuidv4()}.${fileExt}`;
-      const filePath = `${profile.id}/${folderId}/${uniqueName}`;
-
-      console.log("wow");
+      const uniqueName = uuidv4();
+      const filePath = buildInitialRevisionStorageKey(
+        buildFileRevisionBasePath(profile.id, folderId, fileId, uniqueName),
+        fileExt,
+      );
+      const fileHash = buildFileHash(file.buffer);
 
       const { error: bucketError } = await supabase.storage
         .from("Documents")
@@ -89,30 +103,55 @@ export const uploadFile = async (
       if (bucketError)
         throw new CustomError(bucketError.message, HttpStatusCode.BAD_REQUEST);
 
-      console.log("success");
+      try {
+        const [fileData] = await tx
+          .insert(files)
+          .values({
+            id: fileId,
+            userId: profile.id,
+            extension: fileExt,
+            name: fileName,
+            createdBy: profile.username,
+            size: fileSize,
+            path: filePath,
+            folderId: folderId,
+          })
+          .returning();
 
-      const [fileData] = await tx
-        .insert(files)
-        .values({
-          userId: profile.id,
-          extension: fileExt,
-          name: fileName,
-          createdBy: profile.username,
-          size: fileSize,
-          path: filePath,
-          folderId: folderId,
-        })
-        .returning();
+        if (!fileData)
+          throw new CustomError(
+            errors.uploadFileFailed,
+            HttpStatusCode.BAD_REQUEST,
+          );
 
-      if (!fileData)
-        throw new CustomError(
-          errors.uploadFileFailed,
-          HttpStatusCode.BAD_REQUEST,
-        );
+        const [revisionData] = await tx
+          .insert(fileRevisions)
+          .values({
+            fileId: fileData.id,
+            versionNumber: 1,
+            storageKey: filePath,
+            fileHash,
+            size: fileSize,
+          })
+          .returning();
 
-      res
-        .status(HttpStatusCode.CREATED)
-        .json({ message: successMessages.successUpload, data: fileData });
+        if (!revisionData)
+          throw new CustomError(
+            errors.uploadFileFailed,
+            HttpStatusCode.BAD_REQUEST,
+          );
+
+        res
+          .status(HttpStatusCode.CREATED)
+          .json({ message: successMessages.successUpload, data: fileData });
+      } catch (error) {
+        try {
+          await supabase.storage.from("Documents").remove([filePath]);
+        } catch {
+          // Best effort cleanup only.
+        }
+        throw error;
+      }
     });
   } catch (e: any) {
     if (e.constructor.name === "DrizzleQueryError") {
@@ -188,8 +227,6 @@ export const getFiles = async (
             id: categories.id,
             name: categories.name,
             color: categories.color,
-            approvalRequired: categories.approvalRequired,
-            approvalRole: categories.approvalRole,
             createdAt: categories.createdAt,
             updatedAt: categories.updatedAt,
           },
@@ -223,6 +260,7 @@ export const getFiles = async (
       });
     });
   } catch (e: any) {
+    console.log(e);
     if (e.constructor.name === "DrizzleQueryError") {
       next(new DrizzleErrorCode(e.cause.code));
     } else {
@@ -494,7 +532,7 @@ export const deleteFile = async (
 
       const [file] = await tx
         .update(files)
-        .set({ isDeleted: true })
+        .set({ isDeleted: true, isFavourite: false })
         .where(
           and(
             eq(files.id, id),
@@ -510,6 +548,83 @@ export const deleteFile = async (
       res
         .status(HttpStatusCode.OK)
         .json({ message: successMessages.successDeleteFile, data: file });
+    });
+  } catch (e: any) {
+    if (e.constructor.name === "DrizzleQueryError") {
+      next(new DrizzleErrorCode(e.cause.code));
+    } else {
+      next(e);
+    }
+  }
+};
+
+export const deletePermanentFile = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    const { id } = req.params;
+
+    if (!id)
+      throw new CustomError(errors.idMissing, HttpStatusCode.BAD_REQUEST);
+
+    const userData = await validateToken(req.headers.authorization);
+
+    await db.transaction(async (tx) => {
+      const [profile] = await tx
+        .select()
+        .from(profiles)
+        .where(eq(profiles.id, userData.user.id))
+        .limit(1);
+
+      if (!profile)
+        throw new CustomError(errors.invalidUser, HttpStatusCode.BAD_REQUEST);
+
+      const [file] = await tx
+        .select()
+        .from(files)
+        .where(
+          and(
+            eq(files.id, id),
+            eq(files.userId, userData.user.id),
+            eq(files.isDeleted, true),
+          ),
+        )
+        .limit(1);
+
+      if (!file)
+        throw new CustomError(errors.fileNotFound, HttpStatusCode.NOT_FOUND);
+
+      const { error: bucketError } = await supabase.storage
+        .from("Documents")
+        .remove([file.path]);
+
+      if (bucketError) {
+        throw new CustomError(
+          errors.fileDeleteFailed,
+          HttpStatusCode.INTERNAL_SERVER_ERROR,
+        );
+      }
+
+      const [deletedFile] = await tx
+        .delete(files)
+        .where(
+          and(
+            eq(files.id, id),
+            eq(files.userId, userData.user.id),
+            eq(files.isDeleted, true),
+          ),
+        )
+        .returning();
+
+      if (!deletedFile)
+        throw new CustomError(errors.fileNotFound, HttpStatusCode.NOT_FOUND);
+
+      res.status(HttpStatusCode.OK).json({
+        message: successMessages.successPermanentDeleteFile,
+        data: deletedFile,
+      });
     });
   } catch (e: any) {
     if (e.constructor.name === "DrizzleQueryError") {
@@ -730,7 +845,11 @@ export const selectFavourites = async (
         .select()
         .from(files)
         .where(
-          and(eq(files.userId, userData.user.id), eq(files.isFavourite, true)),
+          and(
+            eq(files.userId, userData.user.id),
+            eq(files.isFavourite, true),
+            eq(files.isDeleted, false),
+          ),
         );
 
       res

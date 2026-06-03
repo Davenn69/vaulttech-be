@@ -78,6 +78,7 @@ export const createCategory = async (
         .values({
           name,
           color,
+          userId: profile.id,
         })
         .returning();
 

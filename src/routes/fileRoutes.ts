@@ -1,6 +1,7 @@
 import { Router } from "express";
 import {
   deleteFile,
+  deletePermanentFile,
   getFiles,
   updateName,
   uploadFile,
@@ -70,5 +71,6 @@ route.patch("/addCategory", addFileToCertainCategory);
 route.patch("/removeCategory", removeFileFromCertainCategory);
 
 route.delete("/delete/:id", deleteFile);
+route.delete("/permanent/:id", deletePermanentFile);
 
 export default route;
