@@ -6,9 +6,9 @@
     "outDir": "./dist",
     // Environment Settings
     // See also https://aka.ms/tsconfig/module
-    "module": "nodenext",
-    "target": "es2020",
-    "moduleResolution": "nodenext",
+    "module": "commonjs",
+    "target": "esnext",
+    "moduleResolution": "node",
     "esModuleInterop": true,
     "types": [],
     // For nodejs:
@@ -36,7 +36,7 @@
     "isolatedModules": true,
     "noUncheckedSideEffectImports": true,
     "moduleDetection": "force",
-    "skipLibCheck": true
+    "skipLibCheck": true,
   },
   "exclude": ["dist", "node_modules", "api"]
 }
