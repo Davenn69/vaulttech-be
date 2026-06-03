@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import CustomError from "../types/errorCustom";
 import { successMessages } from "../utils/successMessages";
-import { db } from "..";
+import { db } from "../db";
 import { validateToken } from "../middlewares/protected";
 import { profiles } from "../models/profiles";
 import { and, eq, ilike, ne, SQL } from "drizzle-orm";

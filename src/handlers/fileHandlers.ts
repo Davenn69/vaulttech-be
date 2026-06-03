@@ -6,7 +6,7 @@ import { createHash } from "crypto";
 import { supabase } from "../utils/supabase";
 import { successMessages } from "../utils/successMessages";
 import { v4 as uuidv4 } from "uuid";
-import { db } from "..";
+import { db } from "../db";
 import { profiles } from "../models/profiles";
 import { eq, and, ilike, count, SQL, desc, asc, inArray } from "drizzle-orm";
 import { files } from "../models/files";

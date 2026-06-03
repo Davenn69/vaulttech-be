@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from "express";
-import { db } from "..";
+import { db } from "../db";
 import { categories } from "../models/categories";
 import { files } from "../models/files";
 import { profiles } from "../models/profiles";

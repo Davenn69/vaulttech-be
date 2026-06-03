@@ -4,7 +4,7 @@ import CustomError from "../types/errorCustom";
 import { errors } from "../utils/errorMessages";
 import { HttpStatusCode } from "../types/httpStatusCode";
 import { validateToken } from "../middlewares/protected";
-import { db } from "..";
+import { db } from "../db";
 import { eq, and } from "drizzle-orm";
 import { profiles } from "../models/profiles";
 import { files } from "../models/files";

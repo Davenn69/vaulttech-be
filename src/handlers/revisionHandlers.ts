@@ -3,7 +3,7 @@ import { DrizzleErrorCode } from "../types/drizzleError";
 import CustomError from "../types/errorCustom";
 import { errors } from "../utils/errorMessages";
 import { HttpStatusCode } from "../types/httpStatusCode";
-import { db } from "..";
+import { db } from "../db";
 import { profiles } from "../models/profiles";
 import { and, desc, eq } from "drizzle-orm";
 import { validateToken } from "../middlewares/protected";

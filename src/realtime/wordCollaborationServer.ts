@@ -2,7 +2,7 @@ import { IncomingMessage, Server as HttpServer } from "http";
 import { eq } from "drizzle-orm";
 import { WebSocket, WebSocketServer } from "ws";
 import { v4 as uuidv4 } from "uuid";
-import { db } from "..";
+import { db } from "../db";
 import { validateToken } from "../middlewares/protected";
 import { profiles } from "../models/profiles";
 import { resolveWordFileAccess, loadWordDocumentFromStorage, loadWordCollaborationSnapshot, normalizeWordContent, ensureWordCollaborationDocument, saveWordCollaborationEvent, upsertWordCollaborationSession, markWordCollaborationSessionInactive } from "../services/wordCollaboration";

@@ -3,7 +3,7 @@ import CustomError from "../types/errorCustom";
 import { errors } from "../utils/errorMessages";
 import { supabase } from "../utils/supabase";
 import { successMessages } from "../utils/successMessages";
-import { db } from "..";
+import { db } from "../db";
 import { profiles } from "../models/profiles";
 import { and, desc, eq, ilike, inArray } from "drizzle-orm";
 import { folders } from "../models/folders";

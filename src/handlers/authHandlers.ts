@@ -4,7 +4,7 @@ import { errors } from "../utils/errorMessages";
 import { supabase } from "../utils/supabase";
 import { successMessages } from "../utils/successMessages";
 import { validation } from "../utils/validation";
-import { db } from "..";
+import { db } from "../db";
 import { profiles } from "../models/profiles";
 import { folders } from "../models/folders";
 import { HttpStatusCode } from "../types/httpStatusCode";

@@ -1,6 +1,6 @@
 import { NextFunction, Request, Response } from "express";
 import { and, desc, eq, notExists } from "drizzle-orm";
-import { db } from "..";
+import { db } from "../db";
 import { validateToken } from "../middlewares/protected";
 import CustomError from "../types/errorCustom";
 import { errors } from "../utils/errorMessages";
