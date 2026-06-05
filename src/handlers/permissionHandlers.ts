@@ -1,6 +1,6 @@
 import { NextFunction, Request, Response } from "express";
 import { and, eq } from "drizzle-orm";
-import { db } from "..";
+import { db } from "../db";
 import CustomError from "../types/errorCustom";
 import { errors } from "../utils/errorMessages";
 import { HttpStatusCode } from "../types/httpStatusCode";

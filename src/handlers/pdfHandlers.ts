@@ -4,11 +4,12 @@ import CustomError from "../types/errorCustom";
 import { errors } from "../utils/errorMessages";
 import { HttpStatusCode } from "../types/httpStatusCode";
 import { validateToken } from "../middlewares/protected";
-import { db } from "..";
+import { db } from "../db";
 import { eq, and } from "drizzle-orm";
 import { profiles } from "../models/profiles";
 import { files } from "../models/files";
 import { supabase } from "../utils/supabase";
+import { createClient } from "@supabase/supabase-js";
 
 export const getPdfFile = async (
   req: Request,
@@ -21,6 +22,18 @@ export const getPdfFile = async (
       throw new CustomError(errors.idMissing, HttpStatusCode.BAD_REQUEST);
 
     const userData = await validateToken(req.headers.authorization);
+
+    const supabaseUser = createClient(
+      process.env.SUPABASE_URL!,
+      process.env.SUPABASE_ANON_KEY!,
+      {
+        global: {
+          headers: {
+            Authorization: req.headers.authorization ?? "",
+          },
+        },
+      },
+    );
 
     await db.transaction(async (tx) => {
       const [profile] = await tx
@@ -47,9 +60,8 @@ export const getPdfFile = async (
       if (!file)
         throw new CustomError(errors.fileNotFound, HttpStatusCode.NOT_FOUND);
 
-      const { data: bucketFile, error: bucketError } = await supabase.storage
-        .from("Documents")
-        .download(file.path);
+      const { data: bucketFile, error: bucketError } =
+        await supabaseUser.storage.from("Documents").download(file.path);
 
       if (bucketError || !bucketFile)
         throw new CustomError(

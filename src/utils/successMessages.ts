@@ -39,7 +39,8 @@ class SuccessMessages {
   successRetrieveInvitations: string = "successfully retrieved invitations";
   successRetrieveInviteableUsers: string =
     "successfully retrieved inviteable users";
-  successRetrieveReviewFiles: string = "successfully retrieved reviewable files";
+  successRetrieveReviewFiles: string =
+    "successfully retrieved reviewable files";
   successRetrieveReviewFileContent: string =
     "successfully retrieved reviewable file content";
   successRetrieveReviewComments: string =
@@ -52,13 +53,14 @@ class SuccessMessages {
   successRemoveFavourite: string = "successfully removed from favourites";
 
   successGetRecent: string = "successfully get recent data";
+  successGetSearch: string = "successfully get searched data";
   successGetFileHistory: string = "successfully get file histories";
-  successDownloadFileRevision: string =
-    "successfully download file revision";
+  successDownloadFileRevision: string = "successfully download file revision";
   successGetPhoto: string = "successfully load photo";
   successCreateInvitation: string = "invitation has been successfully created";
   successAcceptInvitation: string = "invitation has been successfully accepted";
-  successDeclineInvitation: string = "invitation has been successfully declined";
+  successDeclineInvitation: string =
+    "invitation has been successfully declined";
 }
 
 export const successMessages = new SuccessMessages();

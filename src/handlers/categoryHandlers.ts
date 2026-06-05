@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from "express";
-import { db } from "..";
+import { db } from "../db";
 import { categories } from "../models/categories";
 import { files } from "../models/files";
 import { profiles } from "../models/profiles";
@@ -252,9 +252,14 @@ export const getFilesByCategory = async (
 
       const groupedData = categoryData.reduce<Record<string, typeof fileData>>(
         (acc, category) => {
-          acc[category.name] = fileData.filter(
+          const categoryFiles = fileData.filter(
             (file) => file.categoryId === category.id,
           );
+
+          if (categoryFiles.length > 0) {
+            acc[category.name] = categoryFiles;
+          }
+
           return acc;
         },
         {},

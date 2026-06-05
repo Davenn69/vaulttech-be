@@ -3,7 +3,7 @@ import { DrizzleErrorCode } from "../types/drizzleError";
 import CustomError from "../types/errorCustom";
 import { errors } from "../utils/errorMessages";
 import { HttpStatusCode } from "../types/httpStatusCode";
-import { db } from "..";
+import { db } from "../db";
 import { profiles } from "../models/profiles";
 import { and, desc, eq } from "drizzle-orm";
 import { validateToken } from "../middlewares/protected";
@@ -25,6 +25,7 @@ import {
   convertWordDocumentXmlToTiptap,
   extractWordDocumentParts,
 } from "../utils/wordUtils";
+import { createClient } from "@supabase/supabase-js";
 
 const buildFileHash = (buffer: Buffer) => {
   return createHash("sha256").update(buffer).digest("hex");
@@ -102,6 +103,18 @@ export const revertRevision = async (
 
     const userData = await validateToken(req.headers.authorization);
 
+    const supabaseUser = createClient(
+      process.env.SUPABASE_URL!,
+      process.env.SUPABASE_ANON_KEY!,
+      {
+        global: {
+          headers: {
+            Authorization: req.headers.authorization ?? "",
+          },
+        },
+      },
+    );
+
     await db.transaction(async (tx) => {
       const [profile] = await tx
         .select()
@@ -124,7 +137,12 @@ export const revertRevision = async (
       const [revision] = await tx
         .select()
         .from(fileRevisions)
-        .where(and(eq(fileRevisions.id, revisionId), eq(fileRevisions.fileId, fileId)))
+        .where(
+          and(
+            eq(fileRevisions.id, revisionId),
+            eq(fileRevisions.fileId, fileId),
+          ),
+        )
         .limit(1);
 
       if (!revision)
@@ -144,16 +162,18 @@ export const revertRevision = async (
 
       const nextVersion = Number(latestRevision?.versionNumber ?? 0) + 1;
       const storageBasePath = resolveFileRevisionBasePath(file.path);
-      const extension = file.extension || revision.storageKey.split(".").pop() || "";
+      const extension =
+        file.extension || revision.storageKey.split(".").pop() || "";
       const storageKey = buildNextRevisionStorageKey(
         storageBasePath,
         extension,
         nextVersion,
       );
 
-      const { data: revisionBlob, error: downloadError } = await supabase.storage
-        .from("Documents")
-        .download(revision.storageKey);
+      const { data: revisionBlob, error: downloadError } =
+        await supabaseUser.storage
+          .from("Documents")
+          .download(revision.storageKey);
 
       if (downloadError || !revisionBlob)
         throw new CustomError(
@@ -173,7 +193,7 @@ export const revertRevision = async (
         );
       }
 
-      const { error: uploadError } = await supabase.storage
+      const { error: uploadError } = await supabaseUser.storage
         .from("Documents")
         .upload(storageKey, buffer, {
           contentType:
@@ -200,10 +220,7 @@ export const revertRevision = async (
           .returning();
 
         if (!updatedFile)
-          throw new CustomError(
-            errors.fileNotFound,
-            HttpStatusCode.NOT_FOUND,
-          );
+          throw new CustomError(errors.fileNotFound, HttpStatusCode.NOT_FOUND);
 
         const [revertRevision] = await tx
           .insert(fileRevisions)
@@ -231,18 +248,12 @@ export const revertRevision = async (
             nextVersion,
           );
 
-          await saveWordCollaborationEvent(
-            tx,
-            file.id,
-            profile.id,
-            "revert",
-            {
-              fromRevisionId: revision.id,
-              toRevisionId: revertRevision.id,
-              versionNumber: nextVersion,
-              collaborationDocumentId: collaborationDocument.id,
-            },
-          );
+          await saveWordCollaborationEvent(tx, file.id, profile.id, "revert", {
+            fromRevisionId: revision.id,
+            toRevisionId: revertRevision.id,
+            versionNumber: nextVersion,
+            collaborationDocumentId: collaborationDocument.id,
+          });
         }
 
         return res.status(HttpStatusCode.OK).json({
@@ -254,7 +265,7 @@ export const revertRevision = async (
         });
       } catch (error) {
         try {
-          await supabase.storage.from("Documents").remove([storageKey]);
+          await supabaseUser.storage.from("Documents").remove([storageKey]);
         } catch {
           // Best effort cleanup only.
         }
@@ -288,6 +299,18 @@ export const downloadRevision = async (
 
     const userData = await validateToken(req.headers.authorization);
 
+    const supabaseUser = createClient(
+      process.env.SUPABASE_URL!,
+      process.env.SUPABASE_ANON_KEY!,
+      {
+        global: {
+          headers: {
+            Authorization: req.headers.authorization ?? "",
+          },
+        },
+      },
+    );
+
     await db.transaction(async (tx) => {
       const [profile] = await tx
         .select()
@@ -311,7 +334,10 @@ export const downloadRevision = async (
         .select()
         .from(fileRevisions)
         .where(
-          and(eq(fileRevisions.id, revisionId), eq(fileRevisions.fileId, fileId)),
+          and(
+            eq(fileRevisions.id, revisionId),
+            eq(fileRevisions.fileId, fileId),
+          ),
         )
         .limit(1);
 
@@ -322,7 +348,7 @@ export const downloadRevision = async (
         );
 
       const revisionFileName = `${file.name}_v${revision.versionNumber}.${file.extension}`;
-      const { data, error } = await supabase.storage
+      const { data, error } = await supabaseUser.storage
         .from("Documents")
         .createSignedUrl(revision.storageKey, 3600, {
           download: revisionFileName,

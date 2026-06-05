@@ -3,7 +3,7 @@ import CustomError from "../types/errorCustom";
 import { errors } from "../utils/errorMessages";
 import { supabase } from "../utils/supabase";
 import { successMessages } from "../utils/successMessages";
-import { db } from "..";
+import { db } from "../db";
 import { profiles } from "../models/profiles";
 import { and, desc, eq, ilike, inArray } from "drizzle-orm";
 import { folders } from "../models/folders";
@@ -12,6 +12,7 @@ import { HttpStatusCode } from "../types/httpStatusCode";
 import { validateToken } from "../middlewares/protected";
 import { folderPermissions } from "../models/folder_permissions";
 import { files } from "../models/files";
+import { createClient } from "@supabase/supabase-js";
 
 export const createFolder = async (
   req: Request,
@@ -119,7 +120,8 @@ export const getFolders = async (
               eq(folders.userId, profile.id),
               eq(folders.isDeleted, false),
             ),
-          );
+          )
+          .orderBy(desc(folders.createdAt));
       } else {
         folder = await tx
           .select()
@@ -131,7 +133,8 @@ export const getFolders = async (
               eq(folders.isDeleted, false),
               ilike(folders.name, `%${name}%`),
             ),
-          );
+          )
+          .orderBy(desc(folders.createdAt));
       }
 
       if (!folder)
@@ -348,6 +351,18 @@ export const deletePermanentFolder = async (
 
     const userData = await validateToken(req.headers.authorization);
 
+    const supabaseUser = createClient(
+      process.env.SUPABASE_URL!,
+      process.env.SUPABASE_ANON_KEY!,
+      {
+        global: {
+          headers: {
+            Authorization: req.headers.authorization ?? "",
+          },
+        },
+      },
+    );
+
     await db.transaction(async (tx) => {
       const [profile] = await tx
         .select()
@@ -404,7 +419,7 @@ export const deletePermanentFolder = async (
         );
 
       if (filesInTree.length > 0) {
-        const { error: bucketError } = await supabase.storage
+        const { error: bucketError } = await supabaseUser.storage
           .from("Documents")
           .remove(filesInTree.map((file) => file.path));
 
@@ -431,10 +446,7 @@ export const deletePermanentFolder = async (
         const [deletedFolder] = await tx
           .delete(folders)
           .where(
-            and(
-              eq(folders.id, folderId),
-              eq(folders.userId, userData.user.id),
-            ),
+            and(eq(folders.id, folderId), eq(folders.userId, userData.user.id)),
           )
           .returning();
 
