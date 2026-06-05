@@ -812,11 +812,15 @@ export const downloadFile = async (
       if (!file)
         throw new CustomError(errors.fileNotFound, HttpStatusCode.NOT_FOUND);
 
+      const downloadFileName = file.extension
+        ? `${file.name}.${file.extension}`
+        : file.name;
+
       const { data: bucketData, error: bucketError } =
         await supabaseUser.storage
           .from("Documents")
           .createSignedUrl(file.path, 3600, {
-            download: file.name,
+            download: downloadFileName,
           });
       if (bucketError)
         return next(new CustomError(errors.downloadFileFailed, 400));
@@ -825,7 +829,7 @@ export const downloadFile = async (
         message: successMessages.successDownloadFile,
         data: {
           downloadUrl: bucketData.signedUrl,
-          name: file.name,
+          name: downloadFileName,
           size: file.size,
         },
       });
