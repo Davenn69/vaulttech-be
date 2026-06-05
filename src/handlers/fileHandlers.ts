@@ -71,6 +71,18 @@ export const uploadFile = async (
 
     const userData = await validateToken(req.headers.authorization);
 
+    const supabaseUser = createClient(
+      process.env.SUPABASE_URL!,
+      process.env.SUPABASE_ANON_KEY!,
+      {
+        global: {
+          headers: {
+            Authorization: req.headers.authorization ?? "",
+          },
+        },
+      },
+    );
+
     await db.transaction(async (tx) => {
       const [profile] = await tx
         .select()
@@ -93,7 +105,7 @@ export const uploadFile = async (
       );
       const fileHash = buildFileHash(file.buffer);
 
-      const { error: bucketError } = await supabase.storage
+      const { error: bucketError } = await supabaseUser.storage
         .from("Documents")
         .upload(filePath, file.buffer, {
           contentType: file.mimetype,
@@ -787,13 +799,7 @@ export const downloadFile = async (
       const [file] = await tx
         .select()
         .from(files)
-        .where(
-          and(
-            eq(files.userId, userData.user.id),
-            eq(files.id, id),
-            eq(files.isDeleted, false),
-          ),
-        );
+        .where(and(eq(files.id, id), eq(files.isDeleted, false)));
 
       if (!file)
         throw new CustomError(errors.fileNotFound, HttpStatusCode.NOT_FOUND);
@@ -992,9 +998,8 @@ export const getPhotoUrl = async (
         .set({ isFavourite: false })
         .where(
           and(
-            eq(files.userId, userData.user.id),
             eq(files.id, id),
-            inArray(files.extension, ["jpg", "png", "jpeg"]),
+            inArray(files.extension, ["jpg", "png", "jpeg", "pptx", "ppt"]),
           ),
         )
         .returning();

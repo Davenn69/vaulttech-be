@@ -119,7 +119,8 @@ export const getFolders = async (
               eq(folders.userId, profile.id),
               eq(folders.isDeleted, false),
             ),
-          );
+          )
+          .orderBy(desc(folders.createdAt));
       } else {
         folder = await tx
           .select()
@@ -131,7 +132,8 @@ export const getFolders = async (
               eq(folders.isDeleted, false),
               ilike(folders.name, `%${name}%`),
             ),
-          );
+          )
+          .orderBy(desc(folders.createdAt));
       }
 
       if (!folder)
@@ -431,10 +433,7 @@ export const deletePermanentFolder = async (
         const [deletedFolder] = await tx
           .delete(folders)
           .where(
-            and(
-              eq(folders.id, folderId),
-              eq(folders.userId, userData.user.id),
-            ),
+            and(eq(folders.id, folderId), eq(folders.userId, userData.user.id)),
           )
           .returning();
 
