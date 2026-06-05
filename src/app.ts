@@ -1,3 +1,4 @@
+import dotenv from "dotenv";
 import express, { NextFunction, Request, Response } from "express";
 import logger from "./middlewares/logger";
 import errorHandler from "./middlewares/error";
@@ -19,7 +20,20 @@ import { drizzleError } from "./middlewares/postgresError";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 
+dotenv.config();
+
 const app = express();
+const defaultAllowedOrigins = [
+  "http://localhost:3000",
+  "http://192.168.126.1:3000",
+];
+
+const envAllowedOrigins = (process.env.ALLOWED_ORIGINS ?? "")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
+const allowedOrigins = [...new Set([...defaultAllowedOrigins, ...envAllowedOrigins])];
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -28,7 +42,14 @@ app.use(cookieParser());
 //Added Cors policy (Remove when done)
 app.use(
   cors({
-    origin: ["http://localhost:3000", "http://192.168.126.1:3000"],
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+        return;
+      }
+
+      callback(new Error(`Origin ${origin} not allowed by CORS`));
+    },
     credentials: true,
   }),
 );
