@@ -4,7 +4,7 @@ import { successMessages } from "../utils/successMessages";
 import { db } from "../db";
 import { validateToken } from "../middlewares/protected";
 import { profiles } from "../models/profiles";
-import { and, eq, ilike, ne, SQL } from "drizzle-orm";
+import { and, eq, ilike, ne, or, sql, SQL } from "drizzle-orm";
 import { errors } from "../utils/errorMessages";
 import { HttpStatusCode } from "../types/httpStatusCode";
 import { files } from "../models/files";
@@ -131,6 +131,7 @@ export const searchData = async (
 ) => {
   try {
     const { keyword } = req.query as { keyword?: string };
+    const normalizedKeyword = keyword?.trim();
 
     const userData = await validateToken(req.headers.authorization);
 
@@ -154,9 +155,17 @@ export const searchData = async (
         eq(folders.isDeleted, false),
       ];
 
-      if (keyword) {
-        fileConditions.push(ilike(files.name, `%${keyword}%`));
-        folderConditions.push(ilike(folders.name, `%${keyword}%`));
+      if (normalizedKeyword) {
+        const searchPattern = `%${normalizedKeyword}%`;
+
+        fileConditions.push(
+          or(
+            ilike(files.name, searchPattern),
+            ilike(files.extension, searchPattern),
+            ilike(sql`${files.name} || '.' || ${files.extension}`, searchPattern),
+          ) as SQL,
+        );
+        folderConditions.push(ilike(folders.name, searchPattern));
       }
 
       const [folderData, fileData] = await Promise.all([
@@ -185,7 +194,7 @@ export const searchData = async (
       );
 
       return res.status(HttpStatusCode.OK).json({
-        message: successMessages.successGetRecent,
+        message: successMessages.successGetSearch,
         data: items,
       });
     });
