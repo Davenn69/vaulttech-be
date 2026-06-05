@@ -228,6 +228,8 @@ export const getExcelFile = async (
       const buffer = Buffer.from(await bucketFile.arrayBuffer());
       const { sheetName, content } = convertExcelBufferToEditorContent(buffer);
 
+      console.log(content);
+
       return res.status(HttpStatusCode.OK).json({
         message: successMessages.successRetrieveExcelFile,
         data: {

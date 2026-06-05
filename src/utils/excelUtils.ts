@@ -33,9 +33,21 @@ export type ExcelEditorCellMeta = {
   italic?: boolean;
 };
 
+export type ExcelEditorRowMeta = {
+  row: number;
+  height?: number | null;
+  hidden?: boolean;
+  customHeight?: boolean;
+  styleId?: number | null;
+  outlineLevel?: number | null;
+  collapsed?: boolean;
+  spans?: string | null;
+};
+
 export type ExcelEditorContent = {
   data: Array<Array<string | number | boolean | null>>;
   cellMeta: ExcelEditorCellMeta[];
+  rowMeta?: ExcelEditorRowMeta[];
 };
 
 const createCrc32Table = () => {
@@ -477,16 +489,66 @@ const parseCell = (cellXml: string) => {
   return cell;
 };
 
+const parseRow = (rowXml: string) => {
+  const rowTag = rowXml.match(/<row\b[^>]*>/i)?.[0];
+
+  if (!rowTag) {
+    return {
+      rowIndex: null as number | null,
+      meta: null as ExcelEditorRowMeta | null,
+    };
+  }
+
+  const attributes = parseXmlAttributes(rowTag);
+  const rowNumber = Number(attributes.r);
+  const rowIndex = Number.isNaN(rowNumber) ? null : Math.max(rowNumber - 1, 0);
+
+  if (rowIndex === null) {
+    return {
+      rowIndex: null,
+      meta: null,
+    };
+  }
+
+  return {
+    rowIndex,
+    meta: {
+      row: rowIndex,
+      height:
+        attributes.ht !== undefined && !Number.isNaN(Number(attributes.ht))
+          ? Number(attributes.ht)
+          : null,
+      hidden: attributes.hidden === "1",
+      customHeight: attributes.customHeight === "1",
+      styleId:
+        attributes.s !== undefined && !Number.isNaN(Number(attributes.s))
+          ? Number(attributes.s)
+          : null,
+      outlineLevel:
+        attributes.outlineLevel !== undefined &&
+        !Number.isNaN(Number(attributes.outlineLevel))
+          ? Number(attributes.outlineLevel)
+          : null,
+      collapsed: attributes.collapsed === "1",
+      spans: attributes.spans ?? null,
+    } as ExcelEditorRowMeta,
+  };
+};
+
 const parseWorksheetRows = (
   worksheetXml: string,
   sharedStrings: string[],
   styles: ReturnType<typeof parseStyles>,
 ) => {
   const rows = worksheetXml.match(/<row[^>]*>[\s\S]*?<\/row>/g) ?? [];
+  const data: Array<Array<string | number | boolean | null>> = [];
+  const rowMeta: ExcelEditorRowMeta[] = [];
 
-  return rows.map((rowXml) => {
+  rows.forEach((rowXml, rowPosition) => {
+    const { rowIndex, meta } = parseRow(rowXml);
+    const targetRowIndex = rowIndex ?? rowPosition;
     const cells = rowXml.match(/<c[\s\S]*?<\/c>/g) ?? [];
-    const row: Array<Record<string, unknown> | null> = [];
+    const row: Array<string | number | boolean | null> = [];
 
     for (const cellXml of cells) {
       const cell = parseCell(cellXml);
@@ -517,21 +579,24 @@ const parseWorksheetRows = (
         row.push(null);
       }
 
-      row[index] = {
-        reference: cell.reference,
-        value: parsedValue,
-        formula: cell.formula ?? null,
-        type: cell.type ?? null,
-        styleId: cell.styleId ?? null,
-        bold: style?.bold ?? false,
-        italic: style?.italic ?? false,
-        fontId: style?.fontId ?? null,
-        numFmtId: style?.numFmtId ?? null,
-      };
+      row[index] = parsedValue;
     }
 
-    return row;
+    while (data.length < targetRowIndex) {
+      data.push([]);
+    }
+
+    data[targetRowIndex] = row;
+
+    if (meta) {
+      rowMeta[targetRowIndex] = meta;
+    }
   });
+
+  return {
+    data,
+    rowMeta,
+  };
 };
 
 export const extractExcelSheetName = (workbookXml: string) => {
@@ -544,7 +609,7 @@ export const convertExcelWorksheetXmlToGrid = (worksheetXml: string) => {
     fonts: [],
     cellXfs: [],
   });
-  return rows.length > 0 ? rows : [[]];
+  return rows.data.length > 0 ? rows.data : [[]];
 };
 
 export const convertExcelBufferToSheet = (buffer: Buffer) => {
@@ -570,13 +635,14 @@ export const convertExcelBufferToSheet = (buffer: Buffer) => {
 
   const content = parseWorksheetRows(worksheetXml, sharedStrings, styles);
 
-  if (content.length === 0) {
+  if (content.data.length === 0) {
     worksheetXml = worksheetXml.replace(/<sheetData\b[^>]*>([\s\S]*?)<\/sheetData>/i, "<sheetData></sheetData>");
   }
 
   return {
     sheetName: sheetInfo.name,
-    content: content.length > 0 ? content : [[]],
+    content: content.data.length > 0 ? content.data : [[]],
+    rowMeta: content.rowMeta,
   };
 };
 
@@ -751,8 +817,119 @@ const normalizeCellMetaEntries = (cellMeta: unknown) => {
   return entries;
 };
 
+const normalizeRowMetaEntries = (rowMeta: unknown) => {
+  const entries: ExcelEditorRowMeta[] = [];
+
+  const visit = (value: unknown) => {
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        visit(item);
+      }
+      return;
+    }
+
+    if (!value || typeof value !== "object") {
+      return;
+    }
+
+    const meta = value as Record<string, unknown>;
+
+    const row =
+      typeof meta.row === "number"
+        ? meta.row
+        : typeof meta.rowIndex === "number"
+          ? meta.rowIndex
+          : typeof meta.r === "number"
+            ? meta.r
+            : null;
+
+    if (row !== null) {
+      entries.push({
+        row,
+        height:
+          typeof meta.height === "number"
+            ? meta.height
+            : typeof meta.ht === "number"
+              ? meta.ht
+              : null,
+        hidden: Boolean(meta.hidden),
+        customHeight: Boolean(meta.customHeight),
+        styleId:
+          typeof meta.styleId === "number"
+            ? meta.styleId
+            : null,
+        outlineLevel:
+          typeof meta.outlineLevel === "number"
+            ? meta.outlineLevel
+            : null,
+        collapsed: Boolean(meta.collapsed),
+        spans:
+          typeof meta.spans === "string"
+            ? meta.spans
+            : null,
+      });
+      return;
+    }
+
+    if ("data" in meta || "rowMeta" in meta) {
+      visit(meta.data);
+      visit(meta.rowMeta);
+      return;
+    }
+
+    const rowKeys = Object.keys(meta).filter((key) => /^\d+$/.test(key));
+    if (rowKeys.length > 0) {
+      for (const rowKey of rowKeys) {
+        const rowIndex = Number(rowKey);
+        const rowValue = meta[rowKey];
+
+        if (Array.isArray(rowValue)) {
+          rowValue.forEach((item) => visit({ row: rowIndex, ...(item as object) }));
+        } else if (rowValue && typeof rowValue === "object") {
+          visit({ row: rowIndex, ...(rowValue as object) });
+        }
+      }
+    }
+  };
+
+  visit(rowMeta);
+  return entries;
+};
+
 const getStyleKey = (bold: boolean, italic: boolean) =>
   `${bold ? "1" : "0"}:${italic ? "1" : "0"}`;
+
+const getRowAttributes = (rowMeta?: ExcelEditorRowMeta) => {
+  const attributes: string[] = [];
+
+  if (rowMeta?.height !== undefined && rowMeta.height !== null) {
+    attributes.push(`ht="${rowMeta.height}"`);
+    attributes.push(`customHeight="1"`);
+  }
+
+  if (rowMeta?.hidden) {
+    attributes.push(`hidden="1"`);
+  }
+
+  if (rowMeta?.styleId !== undefined && rowMeta.styleId !== null) {
+    attributes.push(`s="${rowMeta.styleId}"`);
+    attributes.push(`customFormat="1"`);
+  }
+
+  if (rowMeta?.outlineLevel !== undefined && rowMeta.outlineLevel !== null) {
+    attributes.push(`outlineLevel="${rowMeta.outlineLevel}"`);
+  }
+
+  if (rowMeta?.collapsed) {
+    attributes.push(`collapsed="1"`);
+  }
+
+  if (rowMeta?.spans) {
+    attributes.push(`spans="${escapeXml(rowMeta.spans)}"`);
+  }
+
+  return attributes;
+};
 
 const buildStylesXml = () => {
   return (
@@ -836,10 +1013,12 @@ const buildRootRelationshipsXml = () => {
 const buildSheetXml = (
   data: Array<Array<string | number | boolean | null>>,
   cellMetaMap: Map<string, ExcelEditorCellMeta>,
+  rowMetaMap: Map<number, ExcelEditorRowMeta>,
   sharedStringIndex: Map<string, number>,
 ) => {
   const rowsXml = data
     .map((row, rowIndex) => {
+      const rowMeta = rowMetaMap.get(rowIndex);
       const cellsXml = row
         .map((rawCell, colIndex) => {
           if (rawCell === null || rawCell === undefined || rawCell === "") {
@@ -857,7 +1036,15 @@ const buildSheetXml = (
           const bold = meta?.bold ?? normalized.bold;
           const italic = meta?.italic ?? normalized.italic;
           const styleKey = getStyleKey(Boolean(bold), Boolean(italic));
-          const styleId = styleKey === "0:0" ? 0 : styleKey === "1:0" ? 1 : styleKey === "0:1" ? 2 : 3;
+          const fallbackStyleId =
+            styleKey === "0:0" ? 0 : styleKey === "1:0" ? 1 : styleKey === "0:1" ? 2 : 3;
+          const styleId =
+            typeof meta?.styleId === "number" &&
+            !Number.isNaN(meta.styleId) &&
+            meta.styleId >= 0 &&
+            meta.styleId <= 3
+              ? meta.styleId
+              : fallbackStyleId;
           const ref = `${getColumnLabel(colIndex)}${rowIndex + 1}`;
           const attributes = [`r="${ref}"`];
           let valueXml = "";
@@ -904,11 +1091,10 @@ const buildSheetXml = (
         })
         .filter((cellXml): cellXml is string => cellXml !== null);
 
-      if (cellsXml.length === 0) {
-        return null;
-      }
-
-      return `<row r="${rowIndex + 1}">${cellsXml.join("")}</row>`;
+      const rowAttributes = [`r="${rowIndex + 1}"`, ...getRowAttributes(rowMeta)];
+      return cellsXml.length > 0
+        ? `<row ${rowAttributes.join(" ")}>${cellsXml.join("")}</row>`
+        : `<row ${rowAttributes.join(" ")}></row>`;
     })
     .filter((rowXml): rowXml is string => rowXml !== null);
 
@@ -981,8 +1167,11 @@ export const convertExcelBufferToEditorContent = (
   const rows = worksheetXml.match(/<row[^>]*>[\s\S]*?<\/row>/g) ?? [];
   const data: Array<Array<string | number | boolean | null>> = [];
   const cellMeta: ExcelEditorCellMeta[] = [];
+  const rowMeta: ExcelEditorRowMeta[] = [];
 
-  rows.forEach((rowXml, rowIndex) => {
+  rows.forEach((rowXml, rowPosition) => {
+    const { rowIndex, meta } = parseRow(rowXml);
+    const targetRowIndex = rowIndex ?? rowPosition;
     const cells = rowXml.match(/<c[\s\S]*?<\/c>/g) ?? [];
     const row: Array<string | number | boolean | null> = [];
 
@@ -1017,7 +1206,7 @@ export const convertExcelBufferToEditorContent = (
 
       row[colIndex] = parsedValue;
       cellMeta.push({
-        row: rowIndex,
+        row: targetRowIndex,
         col: colIndex,
         value: parsedValue,
         formula: cell.formula ?? null,
@@ -1030,7 +1219,15 @@ export const convertExcelBufferToEditorContent = (
       });
     });
 
-    data.push(row);
+    while (data.length < targetRowIndex) {
+      data.push([]);
+    }
+
+    data[targetRowIndex] = row;
+
+    if (meta) {
+      rowMeta[targetRowIndex] = meta;
+    }
   });
 
   return {
@@ -1038,6 +1235,7 @@ export const convertExcelBufferToEditorContent = (
     content: {
       data: data.length > 0 ? data : [[]],
       cellMeta,
+      rowMeta,
     },
   };
 };
@@ -1055,6 +1253,10 @@ export const createExcelDocumentFromEditorContent = (
     ? (parsedContent.data as Array<Array<unknown>>)
     : [];
   const cellMeta = buildCellMetaMap(parsedContent?.cellMeta);
+  const rowMeta = new Map<number, ExcelEditorRowMeta>();
+  for (const entry of normalizeRowMetaEntries(parsedContent?.rowMeta)) {
+    rowMeta.set(entry.row, entry);
+  }
   const normalizedData: Array<Array<string | number | boolean | null>> = data.map(
     (row) =>
       (row ?? []).map((cell) => {
@@ -1089,7 +1291,12 @@ export const createExcelDocumentFromEditorContent = (
     }
   }
 
-  const worksheetXml = buildSheetXml(normalizedData, cellMeta, sharedStringIndex);
+  const worksheetXml = buildSheetXml(
+    normalizedData,
+    cellMeta,
+    rowMeta,
+    sharedStringIndex,
+  );
   const workbookXml = buildWorkbookXml(sheetName);
   const workbookRelsXml = buildWorkbookRelationshipsXml();
   const rootRelsXml = buildRootRelationshipsXml();
