@@ -143,7 +143,7 @@ export const createExcelFile = async (
 
         return res.status(HttpStatusCode.CREATED).json({
           message: successMessages.successCreateExcelFile,
-          file: fileData,
+          data: fileData,
           revision: revisionData,
         });
       } catch (error) {
