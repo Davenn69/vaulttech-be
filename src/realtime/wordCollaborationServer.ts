@@ -5,10 +5,20 @@ import { v4 as uuidv4 } from "uuid";
 import { db } from "../db";
 import { validateToken } from "../middlewares/protected";
 import { profiles } from "../models/profiles";
-import { resolveWordFileAccess, loadWordDocumentFromStorage, loadWordCollaborationSnapshot, normalizeWordContent, ensureWordCollaborationDocument, saveWordCollaborationEvent, upsertWordCollaborationSession, markWordCollaborationSessionInactive } from "../services/wordCollaboration";
+import {
+  resolveWordFileAccess,
+  loadWordDocumentFromStorage,
+  loadWordCollaborationSnapshot,
+  normalizeWordContent,
+  ensureWordCollaborationDocument,
+  saveWordCollaborationEvent,
+  upsertWordCollaborationSession,
+  markWordCollaborationSessionInactive,
+} from "../services/wordCollaboration";
 import CustomError from "../types/errorCustom";
 import { errors } from "../utils/errorMessages";
 import { HttpStatusCode } from "../types/httpStatusCode";
+import { Request } from "express";
 
 type WordSocketMessage =
   | {
@@ -85,7 +95,10 @@ const closeWithError = (socket: WebSocket, message: string) => {
   }
 };
 
-export const attachWordCollaborationServer = (server: HttpServer) => {
+export const attachWordCollaborationServer = (
+  server: HttpServer,
+  req: Request,
+) => {
   const wsServer = new WebSocketServer({
     server,
     path: "/ws/word",
@@ -113,12 +126,17 @@ export const attachWordCollaborationServer = (server: HttpServer) => {
           throw new CustomError(errors.invalidUser, HttpStatusCode.BAD_REQUEST);
         }
 
-        const { file } = await resolveWordFileAccess(tx, fileId, profile.id, "read");
+        const { file } = await resolveWordFileAccess(
+          tx,
+          fileId,
+          profile.id,
+          "read",
+        );
 
         let snapshot = await loadWordCollaborationSnapshot(tx, file.id);
 
         if (!snapshot) {
-          const document = await loadWordDocumentFromStorage(file.path);
+          const document = await loadWordDocumentFromStorage(file.path, req);
           const collaborationDocument = await ensureWordCollaborationDocument(
             tx,
             file.id,
@@ -190,7 +208,9 @@ export const attachWordCollaborationServer = (server: HttpServer) => {
         let parsedMessage: WordSocketMessage;
 
         try {
-          parsedMessage = JSON.parse(rawMessage.toString()) as WordSocketMessage;
+          parsedMessage = JSON.parse(
+            rawMessage.toString(),
+          ) as WordSocketMessage;
         } catch {
           sendJson(socket, {
             type: "error",
@@ -248,7 +268,12 @@ export const attachWordCollaborationServer = (server: HttpServer) => {
               );
             }
 
-            const { file } = await resolveWordFileAccess(tx, meta.fileId, meta.userId, "write");
+            const { file } = await resolveWordFileAccess(
+              tx,
+              meta.fileId,
+              meta.userId,
+              "write",
+            );
             const collaborationDocument = await ensureWordCollaborationDocument(
               tx,
               file.id,
@@ -257,15 +282,9 @@ export const attachWordCollaborationServer = (server: HttpServer) => {
               parsedMessage.data.versionNumber,
             );
 
-            await saveWordCollaborationEvent(
-              tx,
-              file.id,
-              meta.userId,
-              "sync",
-              {
-                versionNumber: collaborationDocument.versionNumber,
-              },
-            );
+            await saveWordCollaborationEvent(tx, file.id, meta.userId, "sync", {
+              versionNumber: collaborationDocument.versionNumber,
+            });
 
             return {
               document: normalizeWordContent(collaborationDocument.state),
