@@ -12,6 +12,7 @@ import { HttpStatusCode } from "../types/httpStatusCode";
 import { validateToken } from "../middlewares/protected";
 import { folderPermissions } from "../models/folder_permissions";
 import { files } from "../models/files";
+import { createClient } from "@supabase/supabase-js";
 
 export const createFolder = async (
   req: Request,
@@ -350,6 +351,18 @@ export const deletePermanentFolder = async (
 
     const userData = await validateToken(req.headers.authorization);
 
+    const supabaseUser = createClient(
+      process.env.SUPABASE_URL!,
+      process.env.SUPABASE_ANON_KEY!,
+      {
+        global: {
+          headers: {
+            Authorization: req.headers.authorization ?? "",
+          },
+        },
+      },
+    );
+
     await db.transaction(async (tx) => {
       const [profile] = await tx
         .select()
@@ -406,7 +419,7 @@ export const deletePermanentFolder = async (
         );
 
       if (filesInTree.length > 0) {
-        const { error: bucketError } = await supabase.storage
+        const { error: bucketError } = await supabaseUser.storage
           .from("Documents")
           .remove(filesInTree.map((file) => file.path));
 

@@ -35,6 +35,7 @@ import {
   buildNextRevisionStorageKey,
   resolveFileRevisionBasePath,
 } from "../utils/fileStorage";
+import { createClient } from "@supabase/supabase-js";
 
 const buildFileHash = (buffer: Buffer) => {
   return createHash("sha256").update(buffer).digest("hex");
@@ -56,6 +57,18 @@ export const createWordFile = async (
       throw new CustomError(errors.folderIdMissing, HttpStatusCode.BAD_REQUEST);
 
     const userData = await validateToken(req.headers.authorization);
+
+    const supabaseUser = createClient(
+      process.env.SUPABASE_URL!,
+      process.env.SUPABASE_ANON_KEY!,
+      {
+        global: {
+          headers: {
+            Authorization: req.headers.authorization ?? "",
+          },
+        },
+      },
+    );
 
     await db.transaction(async (tx) => {
       const [profile] = await tx
@@ -81,7 +94,7 @@ export const createWordFile = async (
       );
       const fileHash = buildFileHash(documentBuffer);
 
-      const { error: bucketError } = await supabase.storage
+      const { error: bucketError } = await supabaseUser.storage
         .from("Documents")
         .upload(filePath, documentBuffer, {
           contentType:
@@ -125,7 +138,7 @@ export const createWordFile = async (
           })
           .returning();
 
-          if (!revisionData)
+        if (!revisionData)
           throw new CustomError(
             errors.uploadFileFailed,
             HttpStatusCode.BAD_REQUEST,
@@ -146,7 +159,7 @@ export const createWordFile = async (
         });
       } catch (error) {
         try {
-          await supabase.storage.from("Documents").remove([filePath]);
+          await supabaseUser.storage.from("Documents").remove([filePath]);
         } catch {
           // Best effort cleanup only.
         }
@@ -174,6 +187,18 @@ export const getWordFile = async (
 
     const userData = await validateToken(req.headers.authorization);
 
+    const supabaseUser = createClient(
+      process.env.SUPABASE_URL!,
+      process.env.SUPABASE_ANON_KEY!,
+      {
+        global: {
+          headers: {
+            Authorization: req.headers.authorization ?? "",
+          },
+        },
+      },
+    );
+
     await db.transaction(async (tx) => {
       const [profile] = await tx
         .select()
@@ -186,9 +211,8 @@ export const getWordFile = async (
 
       const { file } = await resolveWordFileAccess(tx, id, profile.id, "read");
 
-      const { data: bucketFile, error: bucketError } = await supabase.storage
-        .from("Documents")
-        .download(file.path);
+      const { data: bucketFile, error: bucketError } =
+        await supabaseUser.storage.from("Documents").download(file.path);
 
       console.log(bucketError);
       console.log(bucketFile);
@@ -264,6 +288,18 @@ export const save = async (req: Request, res: Response, next: NextFunction) => {
 
     const userData = await validateToken(req.headers.authorization);
 
+    const supabaseUser = createClient(
+      process.env.SUPABASE_URL!,
+      process.env.SUPABASE_ANON_KEY!,
+      {
+        global: {
+          headers: {
+            Authorization: req.headers.authorization ?? "",
+          },
+        },
+      },
+    );
+
     await db.transaction(async (tx) => {
       const [profile] = await tx
         .select()
@@ -294,7 +330,7 @@ export const save = async (req: Request, res: Response, next: NextFunction) => {
       );
       const fileHash = buildFileHash(documentBuffer);
 
-      const { error: bucketError } = await supabase.storage
+      const { error: bucketError } = await supabaseUser.storage
         .from("Documents")
         .upload(storageKey, documentBuffer, {
           contentType:
@@ -349,17 +385,11 @@ export const save = async (req: Request, res: Response, next: NextFunction) => {
           nextVersion,
         );
 
-        await saveWordCollaborationEvent(
-          tx,
-          file.id,
-          profile.id,
-          "snapshot",
-          {
-            versionNumber: nextVersion,
-            storageKey,
-            collaborationDocumentId: collaborationDocument.id,
-          },
-        );
+        await saveWordCollaborationEvent(tx, file.id, profile.id, "snapshot", {
+          versionNumber: nextVersion,
+          storageKey,
+          collaborationDocumentId: collaborationDocument.id,
+        });
 
         return res.status(HttpStatusCode.OK).json({
           message: successMessages.successSaveWordFile,
@@ -373,7 +403,7 @@ export const save = async (req: Request, res: Response, next: NextFunction) => {
         });
       } catch (error) {
         try {
-          await supabase.storage.from("Documents").remove([storageKey]);
+          await supabaseUser.storage.from("Documents").remove([storageKey]);
         } catch {
           // Best effort cleanup only.
         }
@@ -416,7 +446,7 @@ export const getWordCollaboration = async (
       const snapshot = await loadWordCollaborationSnapshot(tx, file.id);
 
       if (!snapshot) {
-        const document = await loadWordDocumentFromStorage(file.path);
+        const document = await loadWordDocumentFromStorage(file.path, req);
         const collaborationDocument = await ensureWordCollaborationDocument(
           tx,
           file.id,
@@ -486,8 +516,13 @@ export const joinWordCollaboration = async (
       const snapshot = await loadWordCollaborationSnapshot(tx, file.id);
 
       if (!snapshot) {
-        const document = await loadWordDocumentFromStorage(file.path);
-        await ensureWordCollaborationDocument(tx, file.id, document, profile.id);
+        const document = await loadWordDocumentFromStorage(file.path, req);
+        await ensureWordCollaborationDocument(
+          tx,
+          file.id,
+          document,
+          profile.id,
+        );
       }
 
       const session = await upsertWordCollaborationSession(tx, {
@@ -558,15 +593,9 @@ export const syncWordCollaboration = async (
         versionNumber ?? undefined,
       );
 
-      await saveWordCollaborationEvent(
-        tx,
-        file.id,
-        profile.id,
-        "sync",
-        {
-          versionNumber: collaborationDocument.versionNumber,
-        },
-      );
+      await saveWordCollaborationEvent(tx, file.id, profile.id, "sync", {
+        versionNumber: collaborationDocument.versionNumber,
+      });
 
       return res.status(HttpStatusCode.OK).json({
         message: successMessages.successSyncWordCollaboration,

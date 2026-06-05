@@ -40,22 +40,6 @@ type SharedPermission = {
   grantedTo: string;
 };
 
-const getImagePreviewUrl = async (filePath: string, extension?: string) => {
-  if (!extension || !IMAGE_EXTENSIONS.has(extension.toLowerCase())) {
-    return null;
-  }
-
-  const { data, error } = await supabase.storage
-    .from("Documents")
-    .createSignedUrl(filePath, 3600);
-
-  if (error) {
-    return null;
-  }
-
-  return data.signedUrl;
-};
-
 export const uploadFile = async (
   req: Request,
   res: Response,
@@ -158,7 +142,7 @@ export const uploadFile = async (
           .json({ message: successMessages.successUpload, data: fileData });
       } catch (error) {
         try {
-          await supabase.storage.from("Documents").remove([filePath]);
+          await supabaseUser.storage.from("Documents").remove([filePath]);
         } catch {
           // Best effort cleanup only.
         }
@@ -583,6 +567,18 @@ export const deletePermanentFile = async (
 
     const userData = await validateToken(req.headers.authorization);
 
+    const supabaseUser = createClient(
+      process.env.SUPABASE_URL!,
+      process.env.SUPABASE_ANON_KEY!,
+      {
+        global: {
+          headers: {
+            Authorization: req.headers.authorization ?? "",
+          },
+        },
+      },
+    );
+
     await db.transaction(async (tx) => {
       const [profile] = await tx
         .select()
@@ -608,7 +604,7 @@ export const deletePermanentFile = async (
       if (!file)
         throw new CustomError(errors.fileNotFound, HttpStatusCode.NOT_FOUND);
 
-      const { error: bucketError } = await supabase.storage
+      const { error: bucketError } = await supabaseUser.storage
         .from("Documents")
         .remove([file.path]);
 
@@ -786,6 +782,18 @@ export const downloadFile = async (
 
     const userData = await validateToken(req.headers.authorization);
 
+    const supabaseUser = createClient(
+      process.env.SUPABASE_URL!,
+      process.env.SUPABASE_ANON_KEY!,
+      {
+        global: {
+          headers: {
+            Authorization: req.headers.authorization ?? "",
+          },
+        },
+      },
+    );
+
     await db.transaction(async (tx) => {
       const [profile] = await tx
         .select()
@@ -804,11 +812,12 @@ export const downloadFile = async (
       if (!file)
         throw new CustomError(errors.fileNotFound, HttpStatusCode.NOT_FOUND);
 
-      const { data: bucketData, error: bucketError } = await supabase.storage
-        .from("Documents")
-        .createSignedUrl(file.path, 3600, {
-          download: file.name,
-        });
+      const { data: bucketData, error: bucketError } =
+        await supabaseUser.storage
+          .from("Documents")
+          .createSignedUrl(file.path, 3600, {
+            download: file.name,
+          });
       if (bucketError)
         return next(new CustomError(errors.downloadFileFailed, 400));
 
@@ -982,6 +991,18 @@ export const getPhotoUrl = async (
 
     const userData = await validateToken(req.headers.authorization);
 
+    const supabaseUser = createClient(
+      process.env.SUPABASE_URL!,
+      process.env.SUPABASE_ANON_KEY!,
+      {
+        global: {
+          headers: {
+            Authorization: req.headers.authorization ?? "",
+          },
+        },
+      },
+    );
+
     await db.transaction(async (tx) => {
       const [profile] = await tx
         .select()
@@ -1006,7 +1027,7 @@ export const getPhotoUrl = async (
       if (!file)
         throw new CustomError(errors.fileNotFound, HttpStatusCode.NOT_FOUND);
 
-      const { data, error } = await supabase.storage
+      const { data, error } = await supabaseUser.storage
         .from("Documents")
         .createSignedUrl(file.path, 3600);
 
@@ -1049,6 +1070,18 @@ export const getFileUrl = async (
 
     const userData = await validateToken(req.headers.authorization);
 
+    const supabaseUser = createClient(
+      process.env.SUPABASE_URL!,
+      process.env.SUPABASE_ANON_KEY!,
+      {
+        global: {
+          headers: {
+            Authorization: req.headers.authorization ?? "",
+          },
+        },
+      },
+    );
+
     await db.transaction(async (tx) => {
       const [profile] = await tx
         .select()
@@ -1062,7 +1095,7 @@ export const getFileUrl = async (
       if (!file)
         throw new CustomError(errors.fileNotFound, HttpStatusCode.NOT_FOUND);
 
-      const { data, error } = await supabase.storage
+      const { data, error } = await supabaseUser.storage
         .from("Documents")
         .createSignedUrl(file.path, 3600);
 

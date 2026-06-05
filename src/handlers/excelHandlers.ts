@@ -24,6 +24,7 @@ import {
   buildNextRevisionStorageKey,
   resolveFileRevisionBasePath,
 } from "../utils/fileStorage";
+import { createClient } from "@supabase/supabase-js";
 
 const buildFileHash = (buffer: Buffer) => {
   return createHash("sha256").update(buffer).digest("hex");
@@ -54,6 +55,18 @@ export const createExcelFile = async (
 
     const userData = await validateToken(req.headers.authorization);
 
+    const supabaseUser = createClient(
+      process.env.SUPABASE_URL!,
+      process.env.SUPABASE_ANON_KEY!,
+      {
+        global: {
+          headers: {
+            Authorization: req.headers.authorization ?? "",
+          },
+        },
+      },
+    );
+
     await db.transaction(async (tx) => {
       const [profile] = await tx
         .select()
@@ -78,7 +91,7 @@ export const createExcelFile = async (
       );
       const fileHash = buildFileHash(documentBuffer);
 
-      const { error: bucketError } = await supabase.storage
+      const { error: bucketError } = await supabaseUser.storage
         .from("Documents")
         .upload(filePath, documentBuffer, {
           contentType:
@@ -135,7 +148,7 @@ export const createExcelFile = async (
         });
       } catch (error) {
         try {
-          await supabase.storage.from("Documents").remove([filePath]);
+          await supabaseUser.storage.from("Documents").remove([filePath]);
         } catch {
           // Best effort cleanup only.
         }
@@ -164,6 +177,18 @@ export const getExcelFile = async (
 
     const userData = await validateToken(req.headers.authorization);
 
+    const supabaseUser = createClient(
+      process.env.SUPABASE_URL!,
+      process.env.SUPABASE_ANON_KEY!,
+      {
+        global: {
+          headers: {
+            Authorization: req.headers.authorization ?? "",
+          },
+        },
+      },
+    );
+
     await db.transaction(async (tx) => {
       const [profile] = await tx
         .select()
@@ -191,9 +216,8 @@ export const getExcelFile = async (
       if (!file || file.userId !== profile.id || file.isDeleted)
         throw new CustomError(errors.fileNotFound, HttpStatusCode.NOT_FOUND);
 
-      const { data: bucketFile, error: bucketError } = await supabase.storage
-        .from("Documents")
-        .download(file.path);
+      const { data: bucketFile, error: bucketError } =
+        await supabaseUser.storage.from("Documents").download(file.path);
 
       if (bucketError || !bucketFile)
         throw new CustomError(
@@ -245,6 +269,18 @@ export const saveExcelFile = async (
 
     const userData = await validateToken(req.headers.authorization);
 
+    const supabaseUser = createClient(
+      process.env.SUPABASE_URL!,
+      process.env.SUPABASE_ANON_KEY!,
+      {
+        global: {
+          headers: {
+            Authorization: req.headers.authorization ?? "",
+          },
+        },
+      },
+    );
+
     await db.transaction(async (tx) => {
       const [profile] = await tx
         .select()
@@ -288,7 +324,7 @@ export const saveExcelFile = async (
       );
       const fileHash = buildFileHash(documentBuffer);
 
-      const { error: bucketError } = await supabase.storage
+      const { error: bucketError } = await supabaseUser.storage
         .from("Documents")
         .upload(storageKey, documentBuffer, {
           contentType:
@@ -344,7 +380,7 @@ export const saveExcelFile = async (
         });
       } catch (error) {
         try {
-          await supabase.storage.from("Documents").remove([storageKey]);
+          await supabaseUser.storage.from("Documents").remove([storageKey]);
         } catch {
           // Best effort cleanup only.
         }

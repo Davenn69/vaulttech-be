@@ -14,6 +14,8 @@ import {
   convertWordDocumentXmlToTiptap,
   extractWordDocumentParts,
 } from "../utils/wordUtils";
+import { createClient } from "@supabase/supabase-js";
+import { Request } from "express";
 
 export type TiptapDocument = {
   type: string;
@@ -312,7 +314,20 @@ export const loadWordCollaborationSnapshot = async (
 
 export const loadWordDocumentFromStorage = async (
   filePath: string,
+  req: Request,
 ): Promise<TiptapDocument> => {
+  const supabaseUser = createClient(
+    process.env.SUPABASE_URL!,
+    process.env.SUPABASE_ANON_KEY!,
+    {
+      global: {
+        headers: {
+          Authorization: req.headers.authorization ?? "",
+        },
+      },
+    },
+  );
+
   const { data: bucketFile, error: bucketError } = await supabase.storage
     .from("Documents")
     .download(filePath);
@@ -327,5 +342,8 @@ export const loadWordDocumentFromStorage = async (
   const buffer = Buffer.from(await bucketFile.arrayBuffer());
   const { documentXml, numberingXml } = extractWordDocumentParts(buffer);
 
-  return convertWordDocumentXmlToTiptap(documentXml, numberingXml) as TiptapDocument;
+  return convertWordDocumentXmlToTiptap(
+    documentXml,
+    numberingXml,
+  ) as TiptapDocument;
 };
