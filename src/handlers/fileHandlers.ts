@@ -457,7 +457,7 @@ export const addFileToCertainCategory = async (
   }
 };
 
-export const removeFileFromCertainCategory = async (
+export const removeCategoryFromFile = async (
   req: Request,
   res: Response,
   next: NextFunction,
@@ -490,7 +490,7 @@ export const removeFileFromCertainCategory = async (
         throw new CustomError(errors.fileNotFound, HttpStatusCode.NOT_FOUND);
 
       return res.status(HttpStatusCode.OK).json({
-        message: successMessages.successUpdateFile,
+        message: successMessages.successRemoveFileCategory,
         data: file,
       });
     });
