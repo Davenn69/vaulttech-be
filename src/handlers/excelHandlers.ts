@@ -24,6 +24,7 @@ import {
   buildNextRevisionStorageKey,
   resolveFileRevisionBasePath,
 } from "../utils/fileStorage";
+import { resolveSequentialName } from "../utils/sequentialName";
 import { createClient } from "@supabase/supabase-js";
 
 const buildFileHash = (buffer: Buffer) => {
@@ -84,21 +85,21 @@ export const createExcelFile = async (
       const fileId = uuidv4();
       const fileName = "Untitled";
       const fileExt = "xlsx";
-      const [existingFile] = await tx
-        .select({ id: files.id })
+      const existingFiles = await tx
+        .select({ name: files.name })
         .from(files)
         .where(
           and(
             eq(files.folderId, folderId),
             eq(files.userId, profile.id),
             eq(files.isDeleted, false),
-            eq(files.name, fileName),
           ),
-        )
-        .limit(1);
+        );
 
-      if (existingFile)
-        throw new CustomError(errors.nameAlreadyExists, HttpStatusCode.CONFLICT);
+      const uniqueFileName = resolveSequentialName(
+        fileName,
+        existingFiles.map((existingFile) => existingFile.name),
+      );
 
       const uniqueName = uuidv4();
       const filePath = buildInitialRevisionStorageKey(
@@ -126,7 +127,7 @@ export const createExcelFile = async (
             id: fileId,
             userId: profile.id,
             folderId,
-            name: fileName,
+            name: uniqueFileName,
             createdBy: profile.username,
             extension: fileExt,
             size: documentBuffer.length,
