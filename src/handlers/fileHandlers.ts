@@ -8,7 +8,7 @@ import { successMessages } from "../utils/successMessages";
 import { v4 as uuidv4 } from "uuid";
 import { db } from "../db";
 import { profiles } from "../models/profiles";
-import { eq, and, ilike, count, SQL, desc, asc, inArray } from "drizzle-orm";
+import { eq, and, ilike, count, SQL, desc, asc, inArray, ne } from "drizzle-orm";
 import { files } from "../models/files";
 import { categories } from "../models/categories";
 import { DrizzleErrorCode } from "../types/drizzleError";
@@ -82,6 +82,22 @@ export const uploadFile = async (
       const fileExt = path.extname(file.originalname).replaceAll(".", "");
       const fileSize = file.size;
       const fileName = file.originalname.split(".")[0]!;
+      const [existingFile] = await tx
+        .select({ id: files.id })
+        .from(files)
+        .where(
+          and(
+            eq(files.folderId, folderId),
+            eq(files.userId, profile.id),
+            eq(files.isDeleted, false),
+            eq(files.name, fileName),
+          ),
+        )
+        .limit(1);
+
+      if (existingFile)
+        throw new CustomError(errors.nameAlreadyExists, HttpStatusCode.CONFLICT);
+
       const uniqueName = uuidv4();
       const filePath = buildInitialRevisionStorageKey(
         buildFileRevisionBasePath(profile.id, folderId, fileId, uniqueName),
@@ -373,17 +389,44 @@ export const updateName = async (
         throw new CustomError(errors.invalidUser, HttpStatusCode.BAD_REQUEST);
 
       const [file] = await tx
+        .select()
+        .from(files)
+        .where(and(eq(files.id, id), eq(files.userId, userData.user.id)))
+        .limit(1);
+
+      if (!file)
+        throw new CustomError(errors.fileNotFound, HttpStatusCode.NOT_FOUND);
+
+      const [existingFile] = await tx
+        .select({ id: files.id })
+        .from(files)
+        .where(
+          and(
+            eq(files.folderId, file.folderId),
+            eq(files.userId, userData.user.id),
+            eq(files.isDeleted, false),
+            eq(files.name, name),
+            ne(files.id, id),
+          ),
+        )
+        .limit(1);
+
+      if (existingFile) {
+        throw new CustomError(errors.nameAlreadyExists, HttpStatusCode.CONFLICT);
+      }
+
+      const [updatedFile] = await tx
         .update(files)
         .set({ name: name })
         .where(and(eq(files.id, id), eq(files.userId, userData.user.id)))
         .returning();
 
-      if (!file)
+      if (!updatedFile)
         throw new CustomError(errors.fileNotFound, HttpStatusCode.NOT_FOUND);
 
       res
         .status(HttpStatusCode.OK)
-        .json({ message: successMessages.successUpdateFile, data: file });
+        .json({ message: successMessages.successUpdateFile, data: updatedFile });
     });
   } catch (e: any) {
     if (e.constructor.name === "DrizzleQueryError") {

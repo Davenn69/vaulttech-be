@@ -5,7 +5,7 @@ import { supabase } from "../utils/supabase";
 import { successMessages } from "../utils/successMessages";
 import { db } from "../db";
 import { profiles } from "../models/profiles";
-import { and, desc, eq, ilike, inArray } from "drizzle-orm";
+import { and, desc, eq, ilike, inArray, isNull, ne } from "drizzle-orm";
 import { folders } from "../models/folders";
 import { DrizzleErrorCode } from "../types/drizzleError";
 import { HttpStatusCode } from "../types/httpStatusCode";
@@ -52,6 +52,22 @@ export const createFolder = async (
 
       if (!parentFolder)
         throw new CustomError(errors.folderNotFound, HttpStatusCode.NOT_FOUND);
+
+      const [existingFolder] = await tx
+        .select({ id: folders.id })
+        .from(folders)
+        .where(
+          and(
+            eq(folders.userId, profile.id),
+            eq(folders.isDeleted, false),
+            eq(folders.name, name),
+            eq(folders.parentId, parentFolder.id),
+          ),
+        )
+        .limit(1);
+
+      if (existingFolder)
+        throw new CustomError(errors.nameAlreadyExists, HttpStatusCode.CONFLICT);
 
       const [createdFolder] = await tx
         .insert(folders)
@@ -268,17 +284,48 @@ export const updateFolder = async (
         throw new CustomError(errors.invalidUser, HttpStatusCode.BAD_REQUEST);
 
       const [folder] = await tx
+        .select()
+        .from(folders)
+        .where(and(eq(folders.id, id), eq(folders.userId, userData.user.id)))
+        .limit(1);
+
+      if (!folder)
+        throw new CustomError(errors.folderNotFound, HttpStatusCode.NOT_FOUND);
+
+      const [existingFolder] = await tx
+        .select({ id: folders.id })
+        .from(folders)
+        .where(
+          and(
+            eq(folders.userId, userData.user.id),
+            eq(folders.isDeleted, false),
+            eq(folders.name, name),
+            folder.parentId === null
+              ? isNull(folders.parentId)
+              : eq(folders.parentId, folder.parentId),
+            ne(folders.id, id),
+          ),
+        )
+        .limit(1);
+
+      if (existingFolder)
+        throw new CustomError(errors.nameAlreadyExists, HttpStatusCode.CONFLICT);
+
+      const [updatedFolder] = await tx
         .update(folders)
         .set({ name: name })
         .where(and(eq(folders.userId, userData.user.id), eq(folders.id, id)))
         .returning();
 
-      if (!folder)
+      if (!updatedFolder)
         throw new CustomError(errors.folderNotFound, HttpStatusCode.NOT_FOUND);
 
       res
         .status(HttpStatusCode.OK)
-        .json({ message: successMessages.successUpdateFolder, data: folder });
+        .json({
+          message: successMessages.successUpdateFolder,
+          data: updatedFolder,
+        });
     });
   } catch (e: any) {
     if (e.constructor.name === "DrizzleQueryError") {

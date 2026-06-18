@@ -87,6 +87,22 @@ export const createWordFile = async (
       const fileId = uuidv4();
       const fileName = "Untitled";
       const fileExt = "docx";
+      const [existingFile] = await tx
+        .select({ id: files.id })
+        .from(files)
+        .where(
+          and(
+            eq(files.folderId, folderId),
+            eq(files.userId, profile.id),
+            eq(files.isDeleted, false),
+            eq(files.name, fileName),
+          ),
+        )
+        .limit(1);
+
+      if (existingFile)
+        throw new CustomError(errors.nameAlreadyExists, HttpStatusCode.CONFLICT);
+
       const uniqueName = uuidv4();
       const filePath = buildInitialRevisionStorageKey(
         buildFileRevisionBasePath(profile.id, folderId, fileId, uniqueName),
