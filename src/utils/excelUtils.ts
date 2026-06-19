@@ -10,14 +10,61 @@ type ExcelCell = {
   fontId?: number;
   bold?: boolean;
   italic?: boolean;
+  fontSize?: number | null;
+  textColor?: string | null;
+  backgroundColor?: string | null;
+  fontFamily?: string | null;
+  horizontalAlignment?: string | null;
+  verticalAlignment?: string | null;
+  wrapText?: boolean | null;
+  textRotation?: number | null;
+};
+
+type ExcelCellAlignment = {
+  horizontal?: string | null;
+  vertical?: string | null;
+  wrapText?: boolean | null;
+  textRotation?: number | null;
+};
+
+type ExcelFontStyle = {
+  name?: string | null;
+  size?: number | null;
+  bold?: boolean;
+  italic?: boolean;
+  color?: string | null;
+};
+
+type ExcelFillStyle = {
+  patternType?: string | null;
+  fgColor?: string | null;
 };
 
 type ExcelStyle = {
   styleId: number;
   fontId: number;
+  fillId: number;
   numFmtId: number;
   bold: boolean;
   italic: boolean;
+  fontSize?: number | null;
+  textColor?: string | null;
+  backgroundColor?: string | null;
+  fontFamily?: string | null;
+  alignment?: ExcelCellAlignment | undefined;
+};
+
+type ExcelCellXf = {
+  fontId: number;
+  fillId: number;
+  numFmtId: number;
+  alignment?: ExcelCellAlignment | undefined;
+};
+
+type ParsedExcelStyles = {
+  fonts: ExcelFontStyle[];
+  fills: ExcelFillStyle[];
+  cellXfs: ExcelCellXf[];
 };
 
 export type ExcelEditorCellMeta = {
@@ -31,6 +78,14 @@ export type ExcelEditorCellMeta = {
   numFmtId?: number | null;
   bold?: boolean;
   italic?: boolean;
+  fontSize?: number | null;
+  textColor?: string | null;
+  backgroundColor?: string | null;
+  fontFamily?: string | null;
+  horizontalAlignment?: string | null;
+  verticalAlignment?: string | null;
+  wrapText?: boolean | null;
+  textRotation?: number | null;
 };
 
 export type ExcelEditorRowMeta = {
@@ -390,24 +445,64 @@ const parseSharedStrings = (sharedStringsXml: string) => {
   });
 };
 
-const parseStyles = (stylesXml: string) => {
+const parseStyles = (stylesXml: string): ParsedExcelStyles => {
   const fontXmlBlocks = stylesXml.match(/<fonts\b[^>]*>([\s\S]*?)<\/fonts>/i)?.[1] ?? "";
+  const fillXmlBlocks = stylesXml.match(/<fills\b[^>]*>([\s\S]*?)<\/fills>/i)?.[1] ?? "";
   const cellXfXmlBlocks = stylesXml.match(/<cellXfs\b[^>]*>([\s\S]*?)<\/cellXfs>/i)?.[1] ?? "";
 
-  const fonts = (fontXmlBlocks.match(/<font\b[\s\S]*?<\/font>/g) ?? []).map((fontXml) => ({
-    bold: /<b\b[^>]*\/?>/i.test(fontXml),
-    italic: /<i\b[^>]*\/?>/i.test(fontXml),
-  }));
+  const fonts: ExcelFontStyle[] = (fontXmlBlocks.match(/<font\b[\s\S]*?<\/font>/g) ?? []).map(
+    (fontXml) => ({
+      bold: /<b\b[^>]*\/?>/i.test(fontXml),
+      italic: /<i\b[^>]*\/?>/i.test(fontXml),
+      size: Number(fontXml.match(/<sz\b[^>]*val="([^"]+)"/i)?.[1] ?? 11),
+      name: fontXml.match(/<name\b[^>]*val="([^"]+)"/i)?.[1] ?? null,
+      color: fontXml.match(/<color\b[^>]*rgb="([^"]+)"/i)?.[1] ?? null,
+    }),
+  );
 
-  const cellXfs = (cellXfXmlBlocks.match(/<xf\b[^>]*\/?>/g) ?? []).map((xfXml) => {
+  const fills: ExcelFillStyle[] = (fillXmlBlocks.match(/<fill\b[\s\S]*?<\/fill>/g) ?? []).map(
+    (fillXml) => {
+      const patternType =
+        fillXml.match(/<patternFill\b[^>]*patternType="([^"]+)"/i)?.[1] ?? null;
+      const fgColor = fillXml.match(/<fgColor\b[^>]*rgb="([^"]+)"/i)?.[1] ?? null;
+
+      return {
+        patternType,
+        fgColor,
+      };
+    },
+  );
+
+  const cellXfs: ExcelCellXf[] = (
+    cellXfXmlBlocks.match(/<xf\b[^>]*(?:\/>|>[\s\S]*?<\/xf>)/g) ?? []
+  ).map((xfXml) => {
     const attributes = parseXmlAttributes(xfXml);
+    const alignmentXml = xfXml.match(/<alignment\b[^>]*\/?>/i)?.[0];
+    const alignmentAttributes = alignmentXml ? parseXmlAttributes(alignmentXml) : {};
     return {
       fontId: Number(attributes.fontId ?? 0),
+      fillId: Number(attributes.fillId ?? 0),
       numFmtId: Number(attributes.numFmtId ?? 0),
+      alignment: alignmentXml
+        ? {
+            horizontal: alignmentAttributes.horizontal ?? null,
+            vertical: alignmentAttributes.vertical ?? null,
+            wrapText:
+              alignmentAttributes.wrapText === "1" ||
+              alignmentAttributes.wrapText === "true"
+                ? true
+                : null,
+            textRotation:
+              alignmentAttributes.textRotation !== undefined &&
+              !Number.isNaN(Number(alignmentAttributes.textRotation))
+                ? Number(alignmentAttributes.textRotation)
+                : null,
+          }
+        : undefined,
     };
   });
 
-  return { fonts, cellXfs };
+  return { fonts, fills, cellXfs };
 };
 
 const getCellStyle = (styleId: number | undefined, styles: ReturnType<typeof parseStyles>) => {
@@ -420,20 +515,36 @@ const getCellStyle = (styleId: number | undefined, styles: ReturnType<typeof par
     return {
       styleId,
       fontId: 0,
+      fillId: 0,
       numFmtId: 0,
       bold: false,
       italic: false,
+      fontSize: 11,
+      textColor: null,
+      backgroundColor: null,
     };
   }
 
   const font = styles.fonts[xf.fontId] ?? { bold: false, italic: false };
+  const fill = styles.fills?.[xf.fillId] ?? undefined;
+  const color = font.color ?? null;
+  const fillColor =
+    fill?.patternType && fill.patternType !== "none" && fill.fgColor
+      ? fill.fgColor
+      : null;
 
   return {
     styleId,
     fontId: xf.fontId,
+    fillId: xf.fillId,
     numFmtId: xf.numFmtId,
     bold: font.bold,
     italic: font.italic,
+    fontSize: font.size ?? 11,
+    textColor: color,
+    backgroundColor: fillColor,
+    fontFamily: font.name ?? null,
+    alignment: xf.alignment,
   };
 };
 
@@ -607,6 +718,7 @@ export const extractExcelSheetName = (workbookXml: string) => {
 export const convertExcelWorksheetXmlToGrid = (worksheetXml: string) => {
   const rows = parseWorksheetRows(worksheetXml, [], {
     fonts: [],
+    fills: [],
     cellXfs: [],
   });
   return rows.data.length > 0 ? rows.data : [[]];
@@ -619,7 +731,7 @@ export const convertExcelBufferToSheet = (buffer: Buffer) => {
 
   let worksheetXml = extractZipEntry(buffer, sheetInfo.path).toString("utf8");
   let sharedStrings: string[] = [];
-  let styles = { fonts: [], cellXfs: [] } as ReturnType<typeof parseStyles>;
+  let styles: ParsedExcelStyles = { fonts: [], fills: [], cellXfs: [] };
 
   try {
     sharedStrings = parseSharedStrings(extractExcelSharedStringsXml(buffer));
@@ -630,7 +742,7 @@ export const convertExcelBufferToSheet = (buffer: Buffer) => {
   try {
     styles = parseStyles(extractExcelStylesXml(buffer));
   } catch {
-    styles = { fonts: [], cellXfs: [] };
+    styles = { fonts: [], fills: [], cellXfs: [] };
   }
 
   const content = parseWorksheetRows(worksheetXml, sharedStrings, styles);
@@ -685,6 +797,22 @@ const normalizeCellInput = (cell: unknown) => {
           : null,
       bold: Boolean(typedCell.bold),
       italic: Boolean(typedCell.italic),
+      fontSize:
+        typeof typedCell.fontSize === "number"
+          ? typedCell.fontSize
+          : null,
+      textColor:
+        typeof typedCell.textColor === "string"
+          ? typedCell.textColor
+          : null,
+      backgroundColor:
+        typeof typedCell.backgroundColor === "string"
+          ? typedCell.backgroundColor
+          : null,
+      fontFamily:
+        typeof typedCell.fontFamily === "string"
+          ? typedCell.fontFamily
+          : null,
       styleId:
         typeof typedCell.styleId === "number"
           ? typedCell.styleId
@@ -697,6 +825,22 @@ const normalizeCellInput = (cell: unknown) => {
         typeof typedCell.numFmtId === "number"
           ? typedCell.numFmtId
           : null,
+      horizontalAlignment:
+        typeof typedCell.horizontalAlignment === "string"
+          ? typedCell.horizontalAlignment
+          : null,
+      verticalAlignment:
+        typeof typedCell.verticalAlignment === "string"
+          ? typedCell.verticalAlignment
+          : null,
+      wrapText:
+        typeof typedCell.wrapText === "boolean"
+          ? typedCell.wrapText
+          : null,
+      textRotation:
+        typeof typedCell.textRotation === "number"
+          ? typedCell.textRotation
+          : null,
     };
   }
 
@@ -705,9 +849,17 @@ const normalizeCellInput = (cell: unknown) => {
     formula: null,
     bold: false,
     italic: false,
+    fontSize: null,
+    textColor: null,
+    backgroundColor: null,
+    fontFamily: null,
     styleId: null,
     fontId: null,
     numFmtId: null,
+    horizontalAlignment: null,
+    verticalAlignment: null,
+    wrapText: null,
+    textRotation: null,
   };
 };
 
@@ -776,6 +928,38 @@ const normalizeCellMetaEntries = (cellMeta: unknown) => {
             : null,
         bold: Boolean(meta.bold),
         italic: Boolean(meta.italic),
+        fontSize:
+          typeof meta.fontSize === "number"
+            ? meta.fontSize
+            : null,
+        textColor:
+          typeof meta.textColor === "string"
+            ? meta.textColor
+            : null,
+        backgroundColor:
+          typeof meta.backgroundColor === "string"
+            ? meta.backgroundColor
+            : null,
+        fontFamily:
+          typeof meta.fontFamily === "string"
+            ? meta.fontFamily
+            : null,
+        horizontalAlignment:
+          typeof meta.horizontalAlignment === "string"
+            ? meta.horizontalAlignment
+            : null,
+        verticalAlignment:
+          typeof meta.verticalAlignment === "string"
+            ? meta.verticalAlignment
+            : null,
+        wrapText:
+          typeof meta.wrapText === "boolean"
+            ? meta.wrapText
+            : null,
+        textRotation:
+          typeof meta.textRotation === "number"
+            ? meta.textRotation
+            : null,
       });
       return;
     }
@@ -899,6 +1083,40 @@ const normalizeRowMetaEntries = (rowMeta: unknown) => {
 const getStyleKey = (bold: boolean, italic: boolean) =>
   `${bold ? "1" : "0"}:${italic ? "1" : "0"}`;
 
+const getExcelAlignmentKey = (alignment?: ExcelCellAlignment | null) => {
+  if (!alignment) {
+    return "none";
+  }
+
+  return [
+    alignment.horizontal ?? "",
+    alignment.vertical ?? "",
+    alignment.wrapText ? "1" : "0",
+    alignment.textRotation ?? "",
+  ].join(":");
+};
+
+const getExcelCellStyleKey = (style: {
+  bold: boolean;
+  italic: boolean;
+  numFmtId: number;
+  fontSize?: number | null;
+  textColor?: string | null;
+  backgroundColor?: string | null;
+  fontFamily?: string | null;
+  alignment?: ExcelCellAlignment | null;
+}) => {
+  return [
+    getStyleKey(style.bold, style.italic),
+    style.numFmtId,
+    style.fontSize ?? "",
+    style.textColor ?? "",
+    style.backgroundColor ?? "",
+    style.fontFamily ?? "",
+    getExcelAlignmentKey(style.alignment),
+  ].join("|");
+};
+
 const getRowAttributes = (rowMeta?: ExcelEditorRowMeta) => {
   const attributes: string[] = [];
 
@@ -966,6 +1184,198 @@ const buildStylesXml = () => {
   );
 };
 
+const buildStylesXmlFromCellStyles = (
+  styles: Array<{
+    bold: boolean;
+    italic: boolean;
+    numFmtId: number;
+    fontSize?: number | null;
+    textColor?: string | null;
+    backgroundColor?: string | null;
+    fontFamily?: string | null;
+    alignment?: ExcelCellAlignment | null;
+  }>,
+) => {
+  const uniqueStyles = new Map<string, number>();
+  const styleEntries: Array<{
+    bold: boolean;
+    italic: boolean;
+    numFmtId: number;
+    fontSize?: number | null;
+    textColor?: string | null;
+    backgroundColor?: string | null;
+    fontFamily?: string | null;
+    alignment?: ExcelCellAlignment | null;
+  }> = [];
+
+  const fontKeyToId = new Map<string, number>();
+  const fillKeyToId = new Map<string, number>();
+  const fonts: string[] = [];
+  const fills: string[] = [
+    `<fill><patternFill patternType="none"/></fill>`,
+    `<fill><patternFill patternType="gray125"/></fill>`,
+  ];
+
+  const getFontXml = (style: {
+    bold: boolean;
+    italic: boolean;
+    fontSize?: number | null;
+    textColor?: string | null;
+    fontFamily?: string | null;
+  }) => {
+    const key = [
+      style.bold ? "1" : "0",
+      style.italic ? "1" : "0",
+      style.fontSize ?? 11,
+      style.textColor ?? "",
+      style.fontFamily ?? "Calibri",
+    ].join("|");
+
+    const existingId = fontKeyToId.get(key);
+    if (existingId !== undefined) {
+      return existingId;
+    }
+
+    const fontParts = [
+      style.bold ? "<b/>" : "",
+      style.italic ? "<i/>" : "",
+      `<sz val="${style.fontSize ?? 11}"/>`,
+      style.textColor
+        ? `<color rgb="${escapeXml(style.textColor.replace(/^#/, ""))}"/>`
+        : `<color theme="1"/>`,
+      `<name val="${escapeXml(style.fontFamily ?? "Calibri")}"/>`,
+      `<family val="2"/>`,
+    ].join("");
+
+    const fontXml = `<font>${fontParts}</font>`;
+    const fontId = fonts.length;
+    fontKeyToId.set(key, fontId);
+    fonts.push(fontXml);
+    return fontId;
+  };
+
+  const getFillXml = (backgroundColor?: string | null) => {
+    const normalizedColor = backgroundColor?.trim() || null;
+    const key = normalizedColor ?? "none";
+    const existingId = fillKeyToId.get(key);
+    if (existingId !== undefined) {
+      return existingId;
+    }
+
+    if (!normalizedColor) {
+      fillKeyToId.set(key, 0);
+      return 0;
+    }
+
+    const rgb = normalizedColor.replace(/^#/, "").toUpperCase();
+    const fillXml =
+      `<fill><patternFill patternType="solid">` +
+      `<fgColor rgb="${rgb}"/>` +
+      `<bgColor indexed="64"/>` +
+      `</patternFill></fill>`;
+    const fillId = fills.length;
+    fillKeyToId.set(key, fillId);
+    fills.push(fillXml);
+    return fillId;
+  };
+
+  const registerStyle = (style: {
+    bold: boolean;
+    italic: boolean;
+    numFmtId: number;
+    fontSize?: number | null;
+    textColor?: string | null;
+    backgroundColor?: string | null;
+    fontFamily?: string | null;
+    alignment?: ExcelCellAlignment | null;
+  }) => {
+    const key = getExcelCellStyleKey(style);
+    if (uniqueStyles.has(key)) {
+      return;
+    }
+
+    uniqueStyles.set(key, styleEntries.length);
+    styleEntries.push(style);
+  };
+
+  registerStyle({
+    bold: false,
+    italic: false,
+    numFmtId: 0,
+    fontSize: 11,
+    textColor: null,
+    backgroundColor: null,
+    fontFamily: "Calibri",
+    alignment: null,
+  });
+
+  for (const style of styles) {
+    registerStyle(style);
+  }
+
+  const cellXfsXml = styleEntries
+    .map((style) => {
+      const fontId = getFontXml({
+        bold: style.bold,
+        italic: style.italic,
+        fontSize: style.fontSize ?? 11,
+        textColor: style.textColor ?? null,
+        fontFamily: style.fontFamily ?? "Calibri",
+      });
+      const fillId = getFillXml(style.backgroundColor ?? null);
+      const alignmentXml = style.alignment
+        ? `<alignment${
+            style.alignment.horizontal
+              ? ` horizontal="${escapeXml(style.alignment.horizontal)}"`
+              : ""
+          }${
+            style.alignment.vertical
+              ? ` vertical="${escapeXml(style.alignment.vertical)}"`
+              : ""
+          }${
+            style.alignment.wrapText ? ` wrapText="1"` : ""
+          }${
+            style.alignment.textRotation !== undefined &&
+            style.alignment.textRotation !== null
+              ? ` textRotation="${style.alignment.textRotation}"`
+              : ""
+          }/>`
+        : "";
+      const applyAlignment = style.alignment ? ` applyAlignment="1"` : "";
+      const applyFill = fillId > 0 ? ` applyFill="1"` : "";
+      const applyFont = fontId > 0 ? ` applyFont="1"` : ` applyFont="0"`;
+
+      return (
+        `<xf numFmtId="${style.numFmtId}" fontId="${fontId}" fillId="${fillId}" borderId="0" xfId="0"${applyFont}${applyFill}${applyAlignment}>` +
+        alignmentXml +
+        `</xf>`
+      );
+    })
+    .join("");
+
+  return (
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">` +
+    `<fonts count="${fonts.length}">${fonts.join("")}</fonts>` +
+    `<fills count="${fills.length}">${fills.join("")}</fills>` +
+    `<borders count="1">` +
+    `<border><left/><right/><top/><bottom/><diagonal/></border>` +
+    `</borders>` +
+    `<cellStyleXfs count="1">` +
+    `<xf numFmtId="0" fontId="0" fillId="0" borderId="0"/>` +
+    `</cellStyleXfs>` +
+    `<cellXfs count="${styleEntries.length}">` +
+    cellXfsXml +
+    `</cellXfs>` +
+    `<cellStyles count="1">` +
+    `<cellStyle name="Normal" xfId="0" builtinId="0"/>` +
+    `</cellStyles>` +
+    `<dxfs count="0"/>` +
+    `<tableStyles count="0" defaultTableStyle="TableStyleMedium2" defaultPivotStyle="PivotStyleLight16"/>` +
+    `</styleSheet>`
+  );
+};
+
 const buildContentTypesXml = () => {
   return (
     `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
@@ -1015,6 +1425,7 @@ const buildSheetXml = (
   cellMetaMap: Map<string, ExcelEditorCellMeta>,
   rowMetaMap: Map<number, ExcelEditorRowMeta>,
   sharedStringIndex: Map<string, number>,
+  styleIndexByKey: Map<string, number>,
 ) => {
   const rowsXml = data
     .map((row, rowIndex) => {
@@ -1035,16 +1446,42 @@ const buildSheetXml = (
           const formula = meta?.formula ?? normalized.formula;
           const bold = meta?.bold ?? normalized.bold;
           const italic = meta?.italic ?? normalized.italic;
-          const styleKey = getStyleKey(Boolean(bold), Boolean(italic));
-          const fallbackStyleId =
-            styleKey === "0:0" ? 0 : styleKey === "1:0" ? 1 : styleKey === "0:1" ? 2 : 3;
-          const styleId =
-            typeof meta?.styleId === "number" &&
-            !Number.isNaN(meta.styleId) &&
-            meta.styleId >= 0 &&
-            meta.styleId <= 3
-              ? meta.styleId
-              : fallbackStyleId;
+          const fontSize =
+            typeof meta?.fontSize === "number"
+              ? meta.fontSize
+              : typeof normalized.fontSize === "number"
+                ? normalized.fontSize
+                : 11;
+          const textColor = meta?.textColor ?? normalized.textColor ?? null;
+          const backgroundColor =
+            meta?.backgroundColor ?? normalized.backgroundColor ?? null;
+          const fontFamily = meta?.fontFamily ?? normalized.fontFamily ?? "Calibri";
+          const styleKey = getExcelCellStyleKey({
+            bold: Boolean(bold),
+            italic: Boolean(italic),
+            numFmtId:
+              typeof meta?.numFmtId === "number"
+                ? meta.numFmtId
+                : typeof normalized.numFmtId === "number"
+                  ? normalized.numFmtId
+                  : 0,
+            alignment: {
+              horizontal:
+                meta?.horizontalAlignment ??
+                normalized.horizontalAlignment ??
+                null,
+              vertical:
+                meta?.verticalAlignment ?? normalized.verticalAlignment ?? null,
+              wrapText: meta?.wrapText ?? normalized.wrapText ?? null,
+              textRotation:
+                meta?.textRotation ?? normalized.textRotation ?? null,
+            },
+            fontSize,
+            textColor,
+            backgroundColor,
+            fontFamily,
+          });
+          const styleId = styleIndexByKey.get(styleKey) ?? 0;
           const ref = `${getColumnLabel(colIndex)}${rowIndex + 1}`;
           const attributes = [`r="${ref}"`];
           let valueXml = "";
@@ -1137,6 +1574,74 @@ const buildCellMetaMap = (cellMeta: unknown) => {
   return map;
 };
 
+const collectCellStyleVariants = (
+  data: Array<Array<string | number | boolean | null>>,
+  cellMeta: Map<string, ExcelEditorCellMeta>,
+) => {
+  const variants: Array<{
+    bold: boolean;
+    italic: boolean;
+    numFmtId: number;
+    fontSize?: number | null;
+    textColor?: string | null;
+    backgroundColor?: string | null;
+    fontFamily?: string | null;
+    alignment?: ExcelCellAlignment | null;
+  }> = [];
+
+  for (let rowIndex = 0; rowIndex < data.length; rowIndex++) {
+    const row = data[rowIndex] ?? [];
+
+    for (let colIndex = 0; colIndex < row.length; colIndex++) {
+      const rawCell = row[colIndex];
+      if (rawCell === null || rawCell === undefined || rawCell === "") {
+        continue;
+      }
+
+      const meta = cellMeta.get(`${rowIndex}:${colIndex}`);
+      const normalized = normalizeCellInput(rawCell);
+
+      const bold = meta?.bold ?? normalized.bold;
+      const italic = meta?.italic ?? normalized.italic;
+      const fontSize =
+        typeof meta?.fontSize === "number"
+          ? meta.fontSize
+          : typeof normalized.fontSize === "number"
+            ? normalized.fontSize
+            : 11;
+      const textColor = meta?.textColor ?? normalized.textColor ?? null;
+      const backgroundColor =
+        meta?.backgroundColor ?? normalized.backgroundColor ?? null;
+      const fontFamily = meta?.fontFamily ?? normalized.fontFamily ?? "Calibri";
+      const numFmtId =
+        typeof meta?.numFmtId === "number"
+          ? meta.numFmtId
+          : typeof normalized.numFmtId === "number"
+            ? normalized.numFmtId
+            : 0;
+      const alignment: ExcelCellAlignment | null = {
+        horizontal: meta?.horizontalAlignment ?? normalized.horizontalAlignment ?? null,
+        vertical: meta?.verticalAlignment ?? normalized.verticalAlignment ?? null,
+        wrapText: meta?.wrapText ?? normalized.wrapText ?? null,
+        textRotation: meta?.textRotation ?? normalized.textRotation ?? null,
+      };
+
+      variants.push({
+        bold: Boolean(bold),
+        italic: Boolean(italic),
+        numFmtId,
+        fontSize,
+        textColor,
+        backgroundColor,
+        fontFamily,
+        alignment,
+      });
+    }
+  }
+
+  return variants;
+};
+
 export const convertExcelBufferToEditorContent = (
   buffer: Buffer,
 ): {
@@ -1150,7 +1655,7 @@ export const convertExcelBufferToEditorContent = (
   const worksheetXml = extractZipEntry(buffer, sheetInfo.path).toString("utf8");
 
   let sharedStrings: string[] = [];
-  let styles = { fonts: [], cellXfs: [] } as ReturnType<typeof parseStyles>;
+  let styles: ParsedExcelStyles = { fonts: [], fills: [], cellXfs: [] };
 
   try {
     sharedStrings = parseSharedStrings(extractExcelSharedStringsXml(buffer));
@@ -1161,7 +1666,7 @@ export const convertExcelBufferToEditorContent = (
   try {
     styles = parseStyles(extractExcelStylesXml(buffer));
   } catch {
-    styles = { fonts: [], cellXfs: [] };
+    styles = { fonts: [], fills: [], cellXfs: [] };
   }
 
   const rows = worksheetXml.match(/<row[^>]*>[\s\S]*?<\/row>/g) ?? [];
@@ -1214,8 +1719,16 @@ export const convertExcelBufferToEditorContent = (
         styleId: cell.styleId ?? null,
         bold: style?.bold ?? false,
         italic: style?.italic ?? false,
+        fontSize: style?.fontSize ?? null,
+        textColor: style?.textColor ?? null,
+        backgroundColor: style?.backgroundColor ?? null,
+        fontFamily: style?.fontFamily ?? null,
         fontId: style?.fontId ?? null,
         numFmtId: style?.numFmtId ?? null,
+        horizontalAlignment: style?.alignment?.horizontal ?? null,
+        verticalAlignment: style?.alignment?.vertical ?? null,
+        wrapText: style?.alignment?.wrapText ?? null,
+        textRotation: style?.alignment?.textRotation ?? null,
       });
     });
 
@@ -1291,17 +1804,65 @@ export const createExcelDocumentFromEditorContent = (
     }
   }
 
+  const styleVariants = collectCellStyleVariants(normalizedData, cellMeta);
+  const styleIndexByKey = new Map<string, number>();
+  const uniqueStyleVariants: Array<{
+    bold: boolean;
+    italic: boolean;
+    numFmtId: number;
+    fontSize?: number | null;
+    textColor?: string | null;
+    backgroundColor?: string | null;
+    fontFamily?: string | null;
+    alignment?: ExcelCellAlignment | null;
+  }> = [];
+
+  const registerStyle = (style: {
+    bold: boolean;
+    italic: boolean;
+    numFmtId: number;
+    fontSize?: number | null;
+    textColor?: string | null;
+    backgroundColor?: string | null;
+    fontFamily?: string | null;
+    alignment?: ExcelCellAlignment | null;
+  }) => {
+    const key = getExcelCellStyleKey(style);
+    if (styleIndexByKey.has(key)) {
+      return;
+    }
+
+    styleIndexByKey.set(key, uniqueStyleVariants.length);
+    uniqueStyleVariants.push(style);
+  };
+
+  registerStyle({
+    bold: false,
+    italic: false,
+    numFmtId: 0,
+    fontSize: 11,
+    textColor: null,
+    backgroundColor: null,
+    fontFamily: "Calibri",
+    alignment: null,
+  });
+
+  for (const style of styleVariants) {
+    registerStyle(style);
+  }
+
   const worksheetXml = buildSheetXml(
     normalizedData,
     cellMeta,
     rowMeta,
     sharedStringIndex,
+    styleIndexByKey,
   );
   const workbookXml = buildWorkbookXml(sheetName);
   const workbookRelsXml = buildWorkbookRelationshipsXml();
   const rootRelsXml = buildRootRelationshipsXml();
   const contentTypesXml = buildContentTypesXml();
-  const stylesXml = buildStylesXml();
+  const stylesXml = buildStylesXmlFromCellStyles(uniqueStyleVariants);
   const sharedStringsXml = buildSharedStringsXml(sharedStrings, stringCount);
 
   return createZipBuffer([
