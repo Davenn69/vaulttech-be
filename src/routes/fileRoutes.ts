@@ -13,7 +13,7 @@ import {
   restoreFile,
   moveFile,
   addFileToCertainCategory,
-  removeFileFromCertainCategory,
+  removeCategoryFromFile,
   getFileUrl,
   getPhotoUrl,
   getSharedFiles,
@@ -68,7 +68,7 @@ route.patch("/removeFavourite", removeFavourite);
 route.patch("/restore", restoreFile);
 route.patch("/move", moveFile);
 route.patch("/addCategory", addFileToCertainCategory);
-route.patch("/removeCategory", removeFileFromCertainCategory);
+route.patch("/removeCategory", removeCategoryFromFile);
 
 route.delete("/delete/:id", deleteFile);
 route.delete("/permanent/:id", deletePermanentFile);

@@ -17,6 +17,7 @@ class SuccessMessages {
   successRetrieveFiles: string = "successfully retrieved files";
   successRetrieveSharedFiles: string = "successfully retrieved shared files";
   successUpdateFile: string = "successfully updated file";
+  successRemoveFileCategory: string = "successfully removed category from file";
   successRevertFile: string = "successfully reverted file to selected revision";
   successDeleteFile: string = "successfully deleted file";
   successPermanentDeleteFile: string = "successfully permanently deleted file";

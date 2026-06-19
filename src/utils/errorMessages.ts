@@ -32,6 +32,7 @@ class ErrorMessages {
   permissionResourceMissing: string = "missing permission resource parameter";
 
   fileNotFound: string = "file not found";
+  nameAlreadyExists: string = "name already exists";
   fileNotAccessible: string = "file not accessible";
   folderNotFound: string = "folder not found";
   fileDeleteFailed: string = "unable to delete file";

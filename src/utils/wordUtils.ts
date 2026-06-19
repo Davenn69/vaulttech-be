@@ -316,6 +316,28 @@ const decodeXmlEntities = (value: string) => {
     .replaceAll("&amp;", "&");
 };
 
+const parseRunMarks = (runXml: string) => {
+  const marks: Array<{ type: string }> = [];
+
+  if (/<w:b\b[^>]*\/?>/.test(runXml)) {
+    marks.push({ type: "bold" });
+  }
+
+  if (/<w:i\b[^>]*\/?>/.test(runXml)) {
+    marks.push({ type: "italic" });
+  }
+
+  if (/<w:u\b[^>]*w:val="[^"]*"/.test(runXml)) {
+    marks.push({ type: "underline" });
+  }
+
+  if (/<w:strike\b[^>]*\/?>/.test(runXml) || /<w:dstrike\b[^>]*\/?>/.test(runXml)) {
+    marks.push({ type: "strike" });
+  }
+
+  return marks;
+};
+
 const extractZipEntries = (buffer: Buffer) => {
   const entries: ZipEntryMap = new Map();
   let offset = 0;
@@ -390,27 +412,36 @@ export const extractWordDocumentParts = (buffer: Buffer): WordPackageParts => {
 
 const extractParagraphContent = (paragraphXml: string) => {
   const nodes: Array<Record<string, unknown>> = [];
-  const tokens =
-    paragraphXml.match(
-      /<w:t[^>]*>[\s\S]*?<\/w:t>|<w:br\s*\/?>|<w:tab\s*\/?>/g,
-    ) ?? [];
+  const runs = paragraphXml.match(/<w:r\b[^>]*>[\s\S]*?<\/w:r>/g) ?? [];
 
-  for (const token of tokens) {
-    if (token.startsWith("<w:br")) {
-      nodes.push({ type: "hardBreak" });
-      continue;
-    }
+  for (const runXml of runs) {
+    const marks = parseRunMarks(runXml);
+    const tokens =
+      runXml.match(
+        /<w:t[^>]*>[\s\S]*?<\/w:t>|<w:br\s*\/?>|<w:tab\s*\/?>/g,
+      ) ?? [];
 
-    if (token.startsWith("<w:tab")) {
-      nodes.push({ type: "text", text: "\t" });
-      continue;
-    }
+    for (const token of tokens) {
+      if (token.startsWith("<w:br")) {
+        nodes.push({ type: "hardBreak" });
+        continue;
+      }
 
-    const text = token.replace(/^<w:t[^>]*>/, "").replace(/<\/w:t>$/, "");
+      if (token.startsWith("<w:tab")) {
+        nodes.push({ type: "text", text: "\t", marks });
+        continue;
+      }
 
-    const decoded = decodeXmlEntities(text);
-    if (decoded.length > 0) {
-      nodes.push({ type: "text", text: decoded });
+      const text = token.replace(/^<w:t[^>]*>/, "").replace(/<\/w:t>$/, "");
+
+      const decoded = decodeXmlEntities(text);
+      if (decoded.length > 0) {
+        nodes.push({
+          type: "text",
+          text: decoded,
+          ...(marks.length > 0 ? { marks } : {}),
+        });
+      }
     }
   }
 

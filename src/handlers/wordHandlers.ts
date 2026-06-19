@@ -35,6 +35,7 @@ import {
   buildNextRevisionStorageKey,
   resolveFileRevisionBasePath,
 } from "../utils/fileStorage";
+import { resolveSequentialName } from "../utils/sequentialName";
 import { createClient } from "@supabase/supabase-js";
 
 const buildFileHash = (buffer: Buffer) => {
@@ -87,6 +88,22 @@ export const createWordFile = async (
       const fileId = uuidv4();
       const fileName = "Untitled";
       const fileExt = "docx";
+      const existingFiles = await tx
+        .select({ name: files.name })
+        .from(files)
+        .where(
+          and(
+            eq(files.folderId, folderId),
+            eq(files.userId, profile.id),
+            eq(files.isDeleted, false),
+          ),
+        );
+
+      const uniqueFileName = resolveSequentialName(
+        fileName,
+        existingFiles.map((existingFile) => existingFile.name),
+      );
+
       const uniqueName = uuidv4();
       const filePath = buildInitialRevisionStorageKey(
         buildFileRevisionBasePath(profile.id, folderId, fileId, uniqueName),
@@ -113,7 +130,7 @@ export const createWordFile = async (
             id: fileId,
             userId: profile.id,
             folderId,
-            name: fileName,
+            name: uniqueFileName,
             createdBy: profile.username,
             extension: fileExt,
             size: documentBuffer.length,
@@ -300,6 +317,8 @@ export const save = async (req: Request, res: Response, next: NextFunction) => {
       },
     );
 
+    console.log("hello");
+
     await db.transaction(async (tx) => {
       const [profile] = await tx
         .select()
@@ -320,6 +339,8 @@ export const save = async (req: Request, res: Response, next: NextFunction) => {
         .where(eq(fileRevisions.fileId, file.id))
         .orderBy(desc(fileRevisions.versionNumber))
         .limit(1);
+
+      console.log("here 1");
 
       const nextVersion = Number(latestRevision?.versionNumber ?? 0) + 1;
       const storageBasePath = resolveFileRevisionBasePath(file.path);
@@ -342,6 +363,8 @@ export const save = async (req: Request, res: Response, next: NextFunction) => {
       if (bucketError)
         throw new CustomError(bucketError.message, HttpStatusCode.BAD_REQUEST);
 
+      console.log("here 2");
+
       try {
         const [updatedFile] = await tx
           .update(files)
@@ -351,7 +374,7 @@ export const save = async (req: Request, res: Response, next: NextFunction) => {
             updatedAt: new Date().toISOString(),
             updatedBy: profile.username,
           })
-          .where(and(eq(files.id, file.id), eq(files.userId, profile.id)))
+          .where(and(eq(files.id, file.id)))
           .returning();
 
         if (!updatedFile)
@@ -359,6 +382,8 @@ export const save = async (req: Request, res: Response, next: NextFunction) => {
             errors.uploadFileFailed,
             HttpStatusCode.BAD_REQUEST,
           );
+
+        console.log("here 3");
 
         const [revisionData] = await tx
           .insert(fileRevisions)
@@ -371,11 +396,15 @@ export const save = async (req: Request, res: Response, next: NextFunction) => {
           })
           .returning();
 
+        console.log("here 4");
+
         if (!revisionData)
           throw new CustomError(
             errors.uploadFileFailed,
             HttpStatusCode.BAD_REQUEST,
           );
+
+        console.log("here 5");
 
         const collaborationDocument = await ensureWordCollaborationDocument(
           tx,
@@ -411,6 +440,7 @@ export const save = async (req: Request, res: Response, next: NextFunction) => {
       }
     });
   } catch (e) {
+    console.log(e);
     if ((e as any)?.constructor?.name === "DrizzleQueryError") {
       next(new DrizzleErrorCode((e as any).cause.code));
     } else {
