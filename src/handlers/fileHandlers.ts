@@ -8,7 +8,17 @@ import { successMessages } from "../utils/successMessages";
 import { v4 as uuidv4 } from "uuid";
 import { db } from "../db";
 import { profiles } from "../models/profiles";
-import { eq, and, ilike, count, SQL, desc, asc, inArray, ne } from "drizzle-orm";
+import {
+  eq,
+  and,
+  ilike,
+  count,
+  SQL,
+  desc,
+  asc,
+  inArray,
+  ne,
+} from "drizzle-orm";
 import { files } from "../models/files";
 import { categories } from "../models/categories";
 import { DrizzleErrorCode } from "../types/drizzleError";
@@ -96,7 +106,10 @@ export const uploadFile = async (
         .limit(1);
 
       if (existingFile)
-        throw new CustomError(errors.nameAlreadyExists, HttpStatusCode.CONFLICT);
+        throw new CustomError(
+          errors.nameAlreadyExists,
+          HttpStatusCode.CONFLICT,
+        );
 
       const uniqueName = uuidv4();
       const filePath = buildInitialRevisionStorageKey(
@@ -412,7 +425,10 @@ export const updateName = async (
         .limit(1);
 
       if (existingFile) {
-        throw new CustomError(errors.nameAlreadyExists, HttpStatusCode.CONFLICT);
+        throw new CustomError(
+          errors.nameAlreadyExists,
+          HttpStatusCode.CONFLICT,
+        );
       }
 
       const [updatedFile] = await tx
@@ -426,7 +442,10 @@ export const updateName = async (
 
       res
         .status(HttpStatusCode.OK)
-        .json({ message: successMessages.successUpdateFile, data: updatedFile });
+        .json({
+          message: successMessages.successUpdateFile,
+          data: updatedFile,
+        });
     });
   } catch (e: any) {
     if (e.constructor.name === "DrizzleQueryError") {
@@ -678,6 +697,7 @@ export const deletePermanentFile = async (
       });
     });
   } catch (e: any) {
+    console.log(e);
     if (e.constructor.name === "DrizzleQueryError") {
       next(new DrizzleErrorCode(e.cause.code));
     } else {
