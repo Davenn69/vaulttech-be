@@ -32,6 +32,7 @@ export const getCategories = async (
       const category = await tx
         .select()
         .from(categories)
+        .where(eq(categories.userId, userData.user.id))
         .orderBy(asc(categories.name));
 
       return res.status(HttpStatusCode.OK).json({
